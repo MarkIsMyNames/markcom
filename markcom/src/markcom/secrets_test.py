@@ -46,7 +46,7 @@ def test_reads_secrets(setup, environ, dotenv, token):
     [
         (ExampleSecrets, {}, None, r"(?s)api_token.*port"),
         (ExampleSecrets, {"API_TOKEN": "t", "PORT": "eighty"}, None, "port"),
-        (NoSecrets, {}, "UNKNOWN=x\n", "unknown"),
+        (ExampleSecrets, {"API_TOKEN": "t", "PORT": "1"}, "UNKNOWN=x\n", "unknown"),
     ],
 )
 def test_rejects_bad_secrets(setup, model, environ, dotenv, match):
@@ -55,6 +55,7 @@ def test_rejects_bad_secrets(setup, model, environ, dotenv, match):
         load_secrets(model)
 
 
-def test_no_secrets_needs_no_variables(setup):
-    setup({}, None)
+@pytest.mark.parametrize("dotenv", [None, "SOMEONE_ELSES=x\n"])
+def test_no_secrets_needs_no_variables_and_ignores_dotenv(setup, dotenv):
+    setup({}, dotenv)
     assert load_secrets(NoSecrets) == NoSecrets()
