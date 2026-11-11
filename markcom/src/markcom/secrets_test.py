@@ -1,0 +1,60 @@
+import pytest
+from pydantic import SecretStr
+
+from markcom.config import ConfigError
+from markcom.secrets import BaseSecrets, NoSecrets, load_secrets
+
+
+class ExampleSecrets(BaseSecrets):
+    api_token: SecretStr
+    port: int
+
+
+@pytest.fixture
+def setup(tmp_path, monkeypatch):
+    """Runs in an empty folder with a clean environment, then sets the given variables and .env."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("API_TOKEN", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
+
+    def apply(environ, dotenv):
+        for name, value in environ.items():
+            monkeypatch.setenv(name, value)
+        if dotenv is not None:
+            (tmp_path / ".env").write_text(dotenv, encoding="utf-8")
+
+    return apply
+
+
+@pytest.mark.parametrize(
+    ("environ", "dotenv", "token"),
+    [
+        ({"API_TOKEN": "from-env", "PORT": "8080"}, None, "from-env"),
+        ({}, "API_TOKEN=from-file\nPORT=8080\n", "from-file"),
+        ({"API_TOKEN": "from-env"}, "API_TOKEN=from-file\nPORT=8080\n", "from-env"),
+    ],
+)
+def test_reads_secrets(setup, environ, dotenv, token):
+    setup(environ, dotenv)
+    secrets = load_secrets(ExampleSecrets)
+    assert secrets.api_token.get_secret_value() == token
+    assert secrets.port == 8080
+
+
+@pytest.mark.parametrize(
+    ("model", "environ", "dotenv", "match"),
+    [
+        (ExampleSecrets, {}, None, r"(?s)api_token.*port"),
+        (ExampleSecrets, {"API_TOKEN": "t", "PORT": "eighty"}, None, "port"),
+        (NoSecrets, {}, "UNKNOWN=x\n", "unknown"),
+    ],
+)
+def test_rejects_bad_secrets(setup, model, environ, dotenv, match):
+    setup(environ, dotenv)
+    with pytest.raises(ConfigError, match=match):
+        load_secrets(model)
+
+
+def test_no_secrets_needs_no_variables(setup):
+    setup({}, None)
+    assert load_secrets(NoSecrets) == NoSecrets()
