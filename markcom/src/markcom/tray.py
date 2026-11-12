@@ -25,10 +25,13 @@ logger: logging.Logger = logging.getLogger(__name__)
 ACTION_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, RuntimeError)
 # Edge in pixels of the icon the badge is drawn on; the desktop scales it to the panel.
 ICON_SIZE: int = 64
-# The badge covers this share of the icon's edge, in its top-right corner.
-BADGE_SHARE: float = 0.6
+# The badge covers this share of the icon's edge, in its bottom-left corner, as messaging apps
+# draw theirs.
+BADGE_SHARE: float = 0.55
 # The count's height as a share of the badge's.
-BADGE_TEXT_SHARE: float = 0.6
+BADGE_TEXT_SHARE: float = 0.7
+# Pixels kept clear between the badge and the icon's edge, so antialiasing is not clipped.
+BADGE_MARGIN: int = 1
 BADGE_COLOUR: QColor = QColor("#d32f2f")
 BADGE_TEXT_COLOUR: QColor = QColor("#ffffff")
 
@@ -119,13 +122,14 @@ class Tray(AbstractContextManager["Tray"]):
         if count == 0:
             return pixmap
         size: float = pixmap.width() * BADGE_SHARE
-        badge: QRectF = QRectF(pixmap.width() - size, 0, size, size)
+        badge: QRectF = QRectF(BADGE_MARGIN, pixmap.height() - size - BADGE_MARGIN, size, size)
         with QPainter(pixmap) as painter:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(BADGE_COLOUR)
             painter.drawEllipse(badge)
             font: QFont = painter.font()
+            font.setBold(True)
             font.setPixelSize(int(size * BADGE_TEXT_SHARE))
             painter.setFont(font)
             painter.setPen(BADGE_TEXT_COLOUR)

@@ -1,6 +1,6 @@
 [project]
 name = "markcom"
-version = "0.2.1"
+version = "0.2.2"
 description = "Shared code for Python projects: typed config, .env secrets, logging, the entry-point runner and, with the desktop extra, notifications and a tray icon."
 requires-python = ">=3.12"
 dependencies = [
