@@ -1,15 +1,24 @@
 [project]
 name = "markcom"
-version = "0.1.0"
-description = "Shared start-up code for Python projects: typed config, .env secrets, logging and the entry-point runner."
+version = "0.2.0"
+description = "Shared code for Python projects: typed config, .env secrets, logging, the entry-point runner and, with the desktop extra, notifications and a tray icon."
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.14",
     "pydantic-settings>=2.12",
 ]
 
+[project.optional-dependencies]
+# Desktop apps only: notifications (markcom.notifier) and the tray icon (markcom.tray).
+desktop = [
+    "dbus-fast>=2.44; sys_platform == 'linux'",
+    "desktop-notifier>=6.2",
+    "pyside6-essentials>=6.12",
+]
+
 [dependency-groups]
 dev = [
+    "markcom[desktop]",
     "bandit>=1.9",
     "mypy>=2.4",
     "pip-audit>=2.10",
@@ -30,7 +39,12 @@ exclude = ["**/*_test.py"]
 [tool.pytest.ini_options]
 testpaths = ["src"]
 python_files = ["*_test.py"]
-addopts = "--strict-markers --strict-config -W error --cov=markcom --cov-report=term-missing --cov-fail-under=85"
+addopts = "--strict-markers --strict-config --cov=markcom --cov-report=term-missing --cov-fail-under=85"
+filterwarnings = [
+    "error",
+    # desktop-notifier 6.2.0 (the latest) calls an asyncio API Python 3.14 deprecates; not our code.
+    "ignore:'asyncio.DefaultEventLoopPolicy' is deprecated:DeprecationWarning:desktop_notifier.main",
+]
 
 [tool.coverage.run]
 omit = ["*_test.py"]
