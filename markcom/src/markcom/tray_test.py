@@ -112,16 +112,10 @@ def test_notifications_sent_through_the_tray_show_a_badge_until_a_left_click(mak
     assert not _has_badge()
 
 
-def test_a_notification_sent_without_a_display_time_passes_none_on(make_tray):
-    sent = SentNotifications()
-    make_tray(notifier=sent).send("t", "m", Urgency.Critical)
-    assert sent[0][3] is None
-
-
 def test_a_tray_without_a_notifier_refuses_to_send(make_tray):
     tray = make_tray()
     with pytest.raises(RuntimeError):
-        tray.send("t", "m", Urgency.Critical)
+        tray.send("t", "m", Urgency.Critical, 0)
 
 
 def test_quit_ends_run(make_tray):

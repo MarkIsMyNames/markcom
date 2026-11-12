@@ -101,9 +101,7 @@ class Tray(AbstractContextManager["Tray"]):
         self._icon.show()
         self._app.exec()
 
-    def send(
-        self, title: str, message: str, urgency: Urgency, display_sec: int | None = None
-    ) -> None:
+    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         """Send a notification, as DesktopNotifier.send does, and count it as unread; from any
         thread, as Qt runs the count on the GUI thread."""
         if self._notifier is None:

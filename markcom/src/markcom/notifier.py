@@ -26,14 +26,12 @@ class DesktopNotifier:
             logger.exception("desktop notifications unavailable")
             self._backend = None
 
-    def send(
-        self, title: str, message: str, urgency: Urgency, display_sec: int | None = None
-    ) -> None:
-        """Show a notification for `display_sec`; None keeps it until the user dismisses it."""
+    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
+        """Show a notification for `display_sec`; NEVER_EXPIRES_SEC (0) keeps it until the user
+        dismisses it."""
         if self._backend is None:
             return
-        timeout_sec: int = NEVER_EXPIRES_SEC if display_sec is None else display_sec
         try:
-            self._backend.send(title=title, message=message, urgency=urgency, timeout=timeout_sec)
+            self._backend.send(title=title, message=message, urgency=urgency, timeout=display_sec)
         except BACKEND_ERRORS as error:
             logger.warning("desktop notification failed: %s", error)
