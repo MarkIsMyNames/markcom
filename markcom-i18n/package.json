@@ -1,0 +1,98 @@
+{
+  "name": "@markcom/i18n",
+  "version": "0.2.0",
+  "description": "Locale checks, language detection and routing, and i18next set-up for the react-ui websites.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MarkIsMyNames/ClaudeSkills.git",
+    "directory": "libraries/markcom-i18n"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/locales.d.mts",
+      "default": "./dist/locales.mjs"
+    },
+    "./i18next": {
+      "types": "./dist/i18next.d.mts",
+      "default": "./dist/i18next.mjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.mts",
+      "default": "./dist/vite.mjs"
+    },
+    "./react-router": {
+      "types": "./dist/react-router.d.mts",
+      "default": "./dist/react-router.mjs"
+    },
+    "./vitest-setup": {
+      "types": "./dist/vitest-setup.d.mts",
+      "default": "./dist/vitest-setup.mjs"
+    }
+  },
+  "prettier": "@markcom/web-config/prettier",
+  "scripts": {
+    "build": "tsdown src/locales.ts src/i18next.ts src/vite.ts src/react-router.ts src/vitest-setup.ts --dts --format esm --clean",
+    "lint": "eslint --max-warnings=0 .",
+    "format": "prettier --ignore-path ../../.gitignore --write .",
+    "format:check": "prettier --ignore-path ../../.gitignore --check .",
+    "typecheck": "tsc",
+    "audit": "npm audit --audit-level=low",
+    "test": "vitest run --coverage",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@formatjs/intl-localematcher": "^0.10.1",
+    "escape-html": "^1.0.3",
+    "flat": "^6.0.1",
+    "@lingual/i18n-check": "^0.9.5"
+  },
+  "peerDependencies": {
+    "i18next": "^27.1.1",
+    "react-i18next": "^18.0.1",
+    "vite": "^8.3.7",
+    "react-router": "^8.5.1"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    },
+    "react-router": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@markcom/web-config": "file:../markcom-web-config",
+    "@playwright/test": "^1.65.0",
+    "@types/escape-html": "^1.0.4",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "eslint": "^10.14.0",
+    "i18next": "^27.1.1",
+    "jiti": "^2.7.0",
+    "prettier": "^3.9.10",
+    "react": "^19.3.1",
+    "react-i18next": "^18.0.1",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0",
+    "@tsconfig/strictest": "^2.0.8",
+    "tsdown": "^0.23.7",
+    "react-router": "^8.5.1",
+    "react-dom": "^19.3.1",
+    "@vitejs/plugin-react": "^6.3.0",
+    "@types/react-dom": "^19.3.0"
+  },
+  "overrides": {
+    "minimatch": "^11.0.5",
+    "glob": "^14.0.4"
+  }
+}

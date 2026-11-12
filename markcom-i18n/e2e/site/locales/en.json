@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "Languages & routing test site",
+    "description": "A small site the markcom-i18n end-to-end tests drive."
+  },
+  "page": {
+    "heading": "Hello",
+    "welcome": "Welcome, {{name}}"
+  }
+}

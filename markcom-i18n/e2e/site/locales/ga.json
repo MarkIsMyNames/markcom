@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "title": "Suíomh tástála teangacha & ródaithe",
+    "description": "Suíomh beag a thiomáineann tástálacha markcom-i18n."
+  },
+  "page": {
+    "heading": "Dia duit",
+    "welcome": "Fáilte, {{name}}"
+  }
+}
