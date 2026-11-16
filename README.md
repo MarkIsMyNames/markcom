@@ -27,6 +27,11 @@ npm install @markcom/i18n
 npm install --save-dev @markcom/web-config
 ```
 
+## Shared repository settings
+
+- **Renovate preset** (`default.json`): every repository's `renovate.json` is only `{"extends": ["github>MarkIsMyNames/markcom"]}`, so a rule changed here applies everywhere.
+- **Security workflow** (`.github/workflows/security.yml`): Gitleaks and Semgrep. A CI workflow calls it with `uses: MarkIsMyNames/markcom/.github/workflows/security.yml@<commit sha> # main`, granting `contents: read` and `pull-requests: read`; Renovate keeps the commit up to date.
+
 ## Releasing
 
 CI does both on every push to `main`:
