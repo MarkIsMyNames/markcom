@@ -17,7 +17,7 @@ Python, pinned by release tag, with uv:
 dependencies = ["markcom"]
 
 [tool.uv.sources]
-markcom = { git = "https://github.com/MarkIsMyNames/markcom", subdirectory = "markcom", tag = "markcom-v0.2.3" }
+markcom = { git = "https://github.com/MarkIsMyNames/markcom", subdirectory = "markcom", tag = "markcom-v<version>" }
 ```
 
 TypeScript, from npm:
@@ -31,7 +31,7 @@ npm install --save-dev @markcom/web-config
 
 CI does both on every push to `main`:
 
-- **markcom**: raise `version` in `markcom/pyproject.toml`. CI tags it `markcom-v<version>` if that tag is new.
+- **markcom**: a version raised by hand in `markcom/pyproject.toml` (a minor or major release) is tagged `markcom-v<version>` as it is. Otherwise, if the source or `pyproject.toml` changed since the last release, CI tags the next patch version. Nothing is committed back to `main`.
 - **npm packages**: a version raised by hand in `package.json` is published as it is. Otherwise a changed package is published as the next patch version. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
 
 ## Checks
@@ -46,6 +46,7 @@ CI does both on every push to `main`:
 | Language scanner | `uv run bandit -q -r src -x '*_test.py'` | ESLint security rules, part of `npm run lint` |
 | Audit | `uv run pip-audit --skip-editable` | `npm run audit` |
 | Unit tests, 85% coverage gate | `uv run pytest -q` | `npm test` (Vitest; markcom-i18n only) |
+| Integration tests (own CI job): Linux notifications over a private D-Bus session | `dbus-run-session -- uv run pytest tests/integration --no-cov -q` | none |
 | End-to-end | none | `npm run test:e2e` (Playwright; markcom-i18n only) |
 
 Gitleaks and Semgrep run across the whole repository.

@@ -1,3 +1,4 @@
+import platform
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ class FakeBackend:
 
 @pytest.fixture
 def sent(monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
     shown = []
     monkeypatch.setattr(notifier_module, "DesktopNotifierSync", lambda **_: FakeBackend(shown))
     return shown
@@ -39,6 +41,8 @@ def test_never_expires_sec_keeps_the_notification_until_dismissed(sent):
 
 
 def test_unavailable_backend_makes_sends_do_nothing(monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+
     def unavailable(**_):
         no_bus = "no bus"
         raise OSError(no_bus)
@@ -50,6 +54,7 @@ def test_unavailable_backend_makes_sends_do_nothing(monkeypatch):
 
 
 def test_failed_send_is_not_raised(monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
     monkeypatch.setattr(
         notifier_module,
         "DesktopNotifierSync",
@@ -59,6 +64,7 @@ def test_failed_send_is_not_raised(monkeypatch):
 
 
 def test_programming_errors_are_not_hidden(monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
     monkeypatch.setattr(
         notifier_module, "DesktopNotifierSync", lambda **_: FakeBackend([], KeyError("bug"))
     )

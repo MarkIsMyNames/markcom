@@ -33,30 +33,66 @@ jobs:
       - name: Tests with coverage gate
         run: uv run pytest -q
 
-  # On every push to main (a merged PR included), tags markcom's version from its
-  # pyproject.toml as markcom-v<version>, the tag projects install it by and Renovate watches,
-  # unless that tag already exists. So raising the version is the whole release.
+  # markcom's Linux notifications sent over a real D-Bus session, to a fake notification
+  # service the tests run. A job of its own, so the unit tests stay fast.
+  markcom-integration:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: markcom
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install dbus-run-session
+        run: sudo apt-get update && sudo apt-get install --yes dbus-daemon
+      - name: Install dependencies (including dev and test)
+        run: uv sync --locked
+      # A private session bus, so the fake service can own org.freedesktop.Notifications.
+      - name: Integration tests
+        run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
+
+  # On every push to main (a merged PR included), releases markcom as the tag
+  # markcom-v<version>, the tag projects install it by and Renovate watches. A version raised
+  # by hand in pyproject.toml is released as it is; otherwise, when the library's source or
+  # pyproject.toml changed since the last release, the next patch version is released. Nothing
+  # is committed back to main: the tag points at a release commit, made on top of the pushed
+  # commit, whose pyproject.toml carries the released version.
   release-markcom:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: markcom
+    needs: [markcom, markcom-integration]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Tag the version if it is new
+        with:
+          # Every commit and tag, to compare against the last release.
+          fetch-depth: 0
+      - name: Tag the release
         run: |
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("markcom/pyproject.toml", "rb"))["project"]["version"])')
-          tag="markcom-v${version}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" > /dev/null; then
-            echo "${tag} already exists; nothing to release"
-            exit 0
+          declared=$(python3 -c 'import tomllib; print(tomllib.load(open("markcom/pyproject.toml", "rb"))["project"]["version"])')
+          latest_tag=$(git tag --list 'markcom-v*' --sort=-version:refname | head -n 1)
+          latest=${latest_tag#markcom-v}
+          if [ "$declared" != "$latest" ] && [ "$(printf '%s\n%s\n' "$latest" "$declared" | sort -V | tail -n 1)" = "$declared" ]; then
+            version=$declared
+            echo "Releasing ${version}, raised by hand from ${latest}"
+          else
+            # A release commit's parent is the main commit it was made from, so this compares
+            # main then with main now. Tests are left out: they ship in no release.
+            if git diff --quiet "${latest_tag}^" HEAD -- markcom/src markcom/pyproject.toml ':(exclude)markcom/src/**/*_test.py'; then
+              echo "markcom is unchanged since ${latest}; nothing to release"
+              exit 0
+            fi
+            IFS=. read -r major minor patch <<< "$latest"
+            version="${major}.${minor}.$((patch + 1))"
+            echo "Releasing ${version}, changed since ${latest}"
           fi
+          sed -i "s/^version = \"${declared}\"$/version = \"${version}\"/" markcom/pyproject.toml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "markcom ${version}"
-          git push origin "$tag"
-          echo "Released ${tag}"
+          git commit --allow-empty -m "chore(markcom): release ${version}" -- markcom/pyproject.toml
+          git tag -a "markcom-v${version}" -m "markcom ${version}"
+          git push origin "markcom-v${version}"
 
   # The TypeScript libraries the react-ui websites install from npm. web-config is built
   # first because markcom-i18n lints itself with it.
