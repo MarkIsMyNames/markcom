@@ -11,9 +11,12 @@ dependencies = [
 [project.optional-dependencies]
 # Desktop apps only: notifications (markcom.notifier) and the tray icon (markcom.tray).
 desktop = [
-    "dbus-fast>=2.44; sys_platform == 'linux'",
     "desktop-notifier>=6.2",
     "pyside6-essentials>=6.12",
+    "python-slugify>=9.2.0",
+    "sdbus>=0.14.3",
+    "sdbus-notifications>=1.0.3",
+    "xdg-base-dirs>=6.1.0",
 ]
 
 [dependency-groups]
@@ -25,6 +28,7 @@ dev = [
     "pytest>=9.0",
     "pytest-cov>=7.0",
     "ruff>=0.17",
+    "dbus-fast>=5.2.0",
 ]
 
 [build-system]
