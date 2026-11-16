@@ -36,7 +36,19 @@ CI does both on every push to `main`:
 
 ## Checks
 
-`pre-commit install` runs the same lint, format, type, security, audit and test checks as CI before each commit.
+`pre-commit install` runs the same checks as CI before each commit; `pre-commit run --all-files` runs them on demand.
+
+| Check | markcom (Python, uv) | markcom-i18n, markcom-web-config (TypeScript, npm) |
+|---|---|---|
+| Lint | `uv run ruff check .` | `npm run lint` (ESLint) |
+| Format | `uv run ruff format --check .` | `npm run format:check` (Prettier) |
+| Types | `uv run mypy src` | `npm run typecheck` (tsc) |
+| Language scanner | `uv run bandit -q -r src -x '*_test.py'` | ESLint security rules, part of `npm run lint` |
+| Audit | `uv run pip-audit --skip-editable` | `npm run audit` |
+| Unit tests, 85% coverage gate | `uv run pytest -q` | `npm test` (Vitest; markcom-i18n only) |
+| End-to-end | none | `npm run test:e2e` (Playwright; markcom-i18n only) |
+
+Gitleaks and Semgrep run across the whole repository.
 
 ## Licence
 

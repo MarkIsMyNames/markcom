@@ -13,6 +13,8 @@ logs/
 coverage.xml
 htmlcov/
 coverage/
+.nyc_output/
+lcov.info
 
 # ===== Build output =====
 build/
@@ -49,12 +51,6 @@ temp/
 .DS_Store
 Thumbs.db
 
-# ===== Node (markcom-i18n, markcom-web-config) =====
-node_modules/
-storybook-static/
-test-results/
-playwright-report/
-
 # ===== Python =====
 __pycache__/
 *.py[cod]
@@ -65,4 +61,17 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+.pyright/
 
+# ===== Node / TypeScript =====
+node_modules/
+*.tsbuildinfo
+.next/
+.turbo/
+storybook-static/
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ===== Project-specific temp and generated files =====
+# None: builds, coverage and Playwright output are covered by the sections above.

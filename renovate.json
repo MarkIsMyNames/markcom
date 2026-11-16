@@ -4,7 +4,11 @@
     "config:recommended",
     "helpers:pinGitHubActionDigests",
     "docker:pinDigests",
-    "abandonments:recommended"
+    "abandonments:recommended",
+    "customManagers:githubActionsVersions",
+    "customManagers:dockerfileVersions",
+    "customManagers:makefileVersions",
+    "customManagers:tsconfigNodeVersions"
   ],
   "labels": [
     "dependencies"
@@ -56,6 +60,13 @@
         "node"
       ],
       "automerge": false
+    },
+    {
+      "description": "markcom is pinned by its markcom-v<version> git tag, which Renovate cannot read as a version on its own",
+      "matchDepNames": [
+        "markcom"
+      ],
+      "versioning": "regex:^markcom-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     }
   ]
 }
