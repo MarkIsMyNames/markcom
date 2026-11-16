@@ -32,7 +32,7 @@ npm install --save-dev @markcom/web-config
 CI does both on every push to `main`:
 
 - **markcom**: raise `version` in `markcom/pyproject.toml`. CI tags it `markcom-v<version>` if that tag is new.
-- **npm packages**: a version raised by hand in `package.json` is published as it is. Otherwise a changed package is published as the next patch version. Publishing needs the `NPM_TOKEN` repository secret: a granular npm token with read and write access to the `@markcom` packages.
+- **npm packages**: a version raised by hand in `package.json` is published as it is. Otherwise a changed package is published as the next patch version. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
 
 ## Checks
 

@@ -106,8 +106,8 @@ jobs:
   # On every push to main (a merged PR included), publishes each web library that changed.
   # A version raised by hand in package.json (a minor or major release) is published as it is;
   # otherwise, when the built package differs from the latest on npm, the next patch version
-  # is published. Nothing is committed back. It signs in to npm with the NPM_TOKEN secret: a
-  # granular access token with read and write access to the @markcom packages.
+  # is published. Nothing is committed back. It signs in to npm by trusted publishing, set up
+  # on each package's npm settings page for this repository and ci.yml.
   publish-web-libraries:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: web-libraries
@@ -163,8 +163,8 @@ jobs:
           echo "publish=true" >> "$GITHUB_OUTPUT"
       - name: Publish
         if: steps.release.outputs.publish == 'true'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # npm trusted publishing: npm signs in with this run's OIDC token (id-token: write),
+        # so no npm token is stored anywhere.
         run: npm publish --access public --provenance
 
   secrets:
