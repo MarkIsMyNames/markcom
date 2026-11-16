@@ -1,0 +1,61 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "docker:pinDigests",
+    "abandonments:recommended"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "minimumReleaseAge": "5 days",
+  "internalChecksFilter": "strict",
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "minimumReleaseAge": "1 day",
+    "labels": [
+      "security"
+    ]
+  },
+  "pre-commit": {
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "Minor, patch and digest updates of everything: one PR, merged once CI passes",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "pinDigest"
+      ],
+      "groupName": "non-major updates",
+      "automerge": true,
+      "matchDepNames": [
+        "!python",
+        "!node"
+      ]
+    },
+    {
+      "description": "Major updates of everything: one PR each, merged only after review",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Python and Node.js runtime updates: their own PR, merged only after review",
+      "matchDepNames": [
+        "python",
+        "node"
+      ],
+      "automerge": false
+    }
+  ]
+}

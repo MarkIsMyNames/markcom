@@ -1,0 +1,161 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: fix-byte-order-marker
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-illegal-windows-names
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-shebang-scripts-are-executable
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+
+  - repo: local
+    hooks:
+      - id: block-env-files
+        name: Block .env files from commits
+        entry: .env files hold secrets and must never be committed
+        language: fail
+        files: (^|/)\.env(\..+)?$
+        exclude: (^|/)\.env\.example$
+
+      - id: semgrep
+        name: Semgrep
+        entry: semgrep scan --config p/default --config p/secrets --config p/owasp-top-ten --error --quiet
+        language: system
+        pass_filenames: false
+
+      - id: uv-lock-check
+        name: uv.lock matches pyproject.toml
+        # CI's uv sync --locked fails on a stale lock; this catches it before the commit.
+        entry: bash -c 'uv lock --check --quiet --directory markcom'
+        language: system
+        files: (^|/)(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+      - id: markcom-lint
+        name: "markcom: Lint"
+        entry: bash -c 'cd markcom && uv run ruff check .'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: markcom-format
+        name: "markcom: Format check"
+        entry: bash -c 'cd markcom && uv run ruff format --check .'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: markcom-types
+        name: "markcom: Strict type check"
+        entry: bash -c 'cd markcom && uv run mypy src'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: markcom-language-scanner
+        name: "markcom: Language security scanner"
+        entry: bash -c 'cd markcom && uv run bandit -q -r src -x '\''*_test.py'\'''
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: markcom-audit
+        name: "markcom: Dependency audit"
+        entry: bash -c 'cd markcom && uv run pip-audit --skip-editable'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: markcom-unit-tests
+        name: "markcom: Unit tests with coverage gate"
+        entry: bash -c 'cd markcom && uv run pytest -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: markcom-web-config-lint
+        name: "markcom-web-config: Lint"
+        entry: bash -c 'cd markcom-web-config && npm run lint'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-web-config-format
+        name: "markcom-web-config: Format check"
+        entry: bash -c 'cd markcom-web-config && npm run format:check'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-web-config-types
+        name: "markcom-web-config: Strict type check"
+        entry: bash -c 'cd markcom-web-config && npm run typecheck'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-web-config-audit
+        name: "markcom-web-config: Dependency audit"
+        entry: bash -c 'cd markcom-web-config && npm run audit'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-i18n-lint
+        name: "markcom-i18n: Lint"
+        entry: bash -c 'cd markcom-i18n && npm run lint'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-i18n-format
+        name: "markcom-i18n: Format check"
+        entry: bash -c 'cd markcom-i18n && npm run format:check'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-i18n-types
+        name: "markcom-i18n: Strict type check"
+        entry: bash -c 'cd markcom-i18n && npm run typecheck'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-i18n-audit
+        name: "markcom-i18n: Dependency audit"
+        entry: bash -c 'cd markcom-i18n && npm run audit'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/
+
+      - id: markcom-i18n-unit-tests
+        name: "markcom-i18n: Unit tests with coverage gate"
+        entry: bash -c 'cd markcom-i18n && npm test'
+        language: system
+        pass_filenames: false
+        files: ^markcom-(web-config|i18n)/

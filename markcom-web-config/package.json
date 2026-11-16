@@ -5,8 +5,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MarkIsMyNames/ClaudeSkills.git",
-    "directory": "libraries/markcom-web-config"
+    "url": "git+https://github.com/MarkIsMyNames/markcom.git",
+    "directory": "markcom-web-config"
   },
   "type": "module",
   "engines": {
@@ -33,8 +33,8 @@
   "scripts": {
     "build": "tsdown src/eslint.ts src/vitest.ts --dts --format esm --clean",
     "lint": "eslint --max-warnings=0 .",
-    "format": "prettier --ignore-path ../../.gitignore --write .",
-    "format:check": "prettier --ignore-path ../../.gitignore --check .",
+    "format": "prettier --ignore-path ../.gitignore --write .",
+    "format:check": "prettier --ignore-path ../.gitignore --check .",
     "typecheck": "tsc",
     "audit": "npm audit --audit-level=low"
   },

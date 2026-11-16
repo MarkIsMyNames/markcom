@@ -1,0 +1,68 @@
+# ===== Secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== Logs =====
+*.log
+logs/
+
+# ===== Test coverage =====
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+coverage/
+
+# ===== Build output =====
+build/
+dist/
+out/
+
+# ===== Databases =====
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# ===== Temp files =====
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# ===== Claude and worktrees =====
+.claude/
+.worktrees/
+
+# ===== Editors =====
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Node (markcom-i18n, markcom-web-config) =====
+node_modules/
+storybook-static/
+test-results/
+playwright-report/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
