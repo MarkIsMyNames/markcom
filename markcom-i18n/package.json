@@ -43,7 +43,7 @@
     "lint": "eslint --max-warnings=0 .",
     "format": "prettier --ignore-path ../.gitignore --write .",
     "format:check": "prettier --ignore-path ../.gitignore --check .",
-    "typecheck": "tsc",
+    "typecheck": "tsc --noEmit",
     "audit": "npm audit --audit-level=low",
     "test": "vitest run --coverage",
     "test:e2e": "playwright test"
