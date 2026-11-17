@@ -4,14 +4,17 @@ import sys
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from typing import override
 
 import pytest
 from pydantic import HttpUrl
 from PySide6.QtCore import QDeadlineTimer, QEventLoop, QObject, QPoint, QSize, QTimer, QUrl, Slot
 from PySide6.QtGui import QColor, QDesktopServices, QImage
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QWidget
 
+from markcom.config import CONFIG
+from markcom.tray import Tray, TrayAction
 from markcom.window import WebWindow, WindowApp
 
 # No display is needed: Qt draws off screen. CI runners block Chromium's namespace sandbox, and
@@ -20,10 +23,12 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 
 WAIT_MS = 5000
+QUIET_MS = 500
 PUMP_MS = 50
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
+    @override
     def log_message(self, *args):
         pass
 
@@ -31,6 +36,7 @@ class QuietHandler(SimpleHTTPRequestHandler):
 class RecordingHandler(QuietHandler):
     requests = None
 
+    @override
     def do_GET(self):
         self.requests.append(self.path)
         super().do_GET()
@@ -47,8 +53,12 @@ def other_site(tmp_path_factory):
     folder = tmp_path_factory.mktemp("other")
     (folder / "inner.html").write_text("<title>Inner</title>", encoding="utf-8")
     requests = []
-    handler = type("Handler", (RecordingHandler,), {"requests": requests})
-    server, base = serve(folder, handler)
+
+    class Handler(RecordingHandler):
+        pass
+
+    Handler.requests = requests
+    server, base = serve(folder, Handler)
     yield base, requests
     server.shutdown()
     server.server_close()
@@ -130,8 +140,8 @@ def make_window(request, site, icon):
         window.close()
 
 
-def wait_until(predicate):
-    deadline = QDeadlineTimer(WAIT_MS)
+def wait_until(predicate, deadline_ms=WAIT_MS):
+    deadline = QDeadlineTimer(deadline_ms)
     while not predicate():
         if deadline.hasExpired():
             return False
@@ -216,6 +226,16 @@ def test_reopening_keeps_size_position_and_page(make_window):
     assert marker_reads_back()
 
 
+def test_open_brings_a_minimised_window_back(make_window):
+    window = make_window()
+    window.open()
+    shown().showMinimized()
+    assert not window.is_open()
+    window.open()
+    assert window.is_open()
+    assert not shown().isMinimized()
+
+
 def test_open_and_close_from_another_thread_return_with_the_state_changed(make_window):
     window = make_window()
     records = []
@@ -226,7 +246,7 @@ def test_open_and_close_from_another_thread_return_with_the_state_changed(make_w
         window.close()
         records.append(window.is_open())
 
-    thread = threading.Thread(target=work)
+    thread = threading.Thread(target=work, daemon=True)
     thread.start()
     assert wait_until(lambda: not thread.is_alive())
     thread.join()
@@ -270,7 +290,7 @@ def test_non_web_links_neither_load_nor_reach_the_desktop(make_window, browser, 
     make_window().open()
     assert wait_until(lambda: view().title() == "Home")
     click(link_id)
-    wait_until(lambda: False)
+    wait_until(lambda: False, QUIET_MS)
     assert browser.urls == []
     assert view().title() == "Home"
 
@@ -301,8 +321,13 @@ def test_methods_without_an_application_fail_fast(icon):
         target=open_without_an_application, args=(icon,)
     )
     child.start()
-    child.join(60)
-    assert child.exitcode == 3
+    try:
+        child.join(60)
+        assert child.exitcode == 3
+    finally:
+        if child.is_alive():
+            child.kill()
+            child.join()
 
 
 def run_a_window_app(url, icon):
@@ -320,6 +345,39 @@ def test_a_window_app_ends_when_its_window_closes(site, icon):
     child.start()
     try:
         child.join(60)
+        assert child.exitcode == 0
+    finally:
+        if child.is_alive():
+            child.kill()
+            child.join()
+
+
+def quit_while_an_action_calls_the_window(url, icon):
+    """Child process body: Quit ends exec() while a tray action still has a window call to make."""
+    window = WebWindow("Solo", HttpUrl(url), icon)
+    started = threading.Event()
+    go = threading.Event()
+
+    def slow_action():
+        started.set()
+        go.wait()
+        window.is_open()
+
+    with Tray("Solo", icon, None, window, [TrayAction("Slow", slow_action)]) as tray:
+        QApplication.instance().findChild(QSystemTrayIcon).contextMenu().actions()[0].trigger()
+        started.wait()
+        QTimer.singleShot(0, QApplication.quit)
+        tray.run()
+        go.set()
+
+
+def test_quitting_does_not_hang_on_a_window_call_made_after_exec_returns(site, icon):
+    child = multiprocessing.get_context("spawn").Process(
+        target=quit_while_an_action_calls_the_window, args=(f"{site}/index.html", icon)
+    )
+    child.start()
+    try:
+        child.join(CONFIG.window.gui_wait_sec + 60)
         assert child.exitcode == 0
     finally:
         if child.is_alive():
