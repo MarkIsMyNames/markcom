@@ -150,6 +150,9 @@ class _Application(QApplication):
     """A QApplication that shuts down when its `with` block ends, as Qt allows only one at a
     time."""
 
+    def __init__(self, name: str) -> None:
+        super().__init__([name])
+
     def __enter__(self) -> Self:
         return self
 
@@ -161,6 +164,6 @@ def run_without_tray(name: str, window: WebWindow) -> None:
     """Run `window` as an app with no tray, on the main thread: open it and block until it is
     closed."""
     # Qt's default stays on: with no tray, closing the last window must end the app.
-    with _Application([name]) as app:
+    with _Application(name) as app:
         window.open()
         app.exec()
