@@ -57,11 +57,8 @@ class _OwnOriginPage(QWebEnginePage):
             logger.warning("Refused a %s link to %s", url.scheme(), url.host())
 
     def _on_new_window(self, request: QWebEngineNewWindowRequest) -> None:
-        url: QUrl = request.requestedUrl()
-        if self._is_own_origin(url):
-            self.load(url)
-        else:
-            self._send_away(url)
+        # The load passes through _on_navigation, which keeps other sites out of the window.
+        self.load(request.requestedUrl())
 
 
 class WebWindow(TrayTarget):
