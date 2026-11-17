@@ -4,7 +4,6 @@ QApplication is created: QtWebEngine must be loaded first."""
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future
-from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import override
 
@@ -30,7 +29,7 @@ def _on_gui_thread[T](work: Callable[[], T]) -> T:
     app: QCoreApplication | None = QApplication.instance()
     if app is None or not isinstance(app, QApplication):
         # Qt aborts the whole process if a widget is built with no application.
-        no_app: str = "no QApplication: build a Tray or a WindowApp before using a WebWindow"
+        no_app: str = "no QApplication: use a WebWindow under a Tray or run_without_tray"
         raise RuntimeError(no_app)
     if QThread.isMainThread():
         return work()
@@ -146,21 +145,15 @@ class WebWindow(TrayTarget):
         return holder
 
 
-class WindowApp(AbstractContextManager["WindowApp"]):
-    """The application for an app with no tray: build it and call run() on the main thread."""
-
-    def __init__(self, name: str, window: WebWindow) -> None:
-        # Qt's default, quit when the last window closes, is kept: with no tray, closing the
-        # only window ends the app.
-        self._app: QApplication = QApplication([name])
-        self._window: WebWindow = window
-
-    @override
-    def __exit__(self, *_: object) -> None:
+def run_without_tray(name: str, window: WebWindow) -> None:
+    """Run `window` as an app with no tray, on the main thread: open it and block until it is
+    closed."""
+    # Qt's default, quit when the last window closes, is kept: with no tray, closing the
+    # only window ends the app.
+    app: QApplication = QApplication([name])
+    try:
+        window.open()
+        app.exec()
+    finally:
         # Release the application, as Qt allows only one at a time.
-        self._app.shutdown()
-
-    def run(self) -> None:
-        """Open the window and block until it is closed."""
-        self._window.open()
-        self._app.exec()
+        app.shutdown()
