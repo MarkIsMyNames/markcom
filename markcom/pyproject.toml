@@ -1,6 +1,6 @@
 [project]
 name = "markcom"
-version = "0.2.3"
+version = "0.3.0"
 description = "Shared code for Python projects: typed config, .env secrets, logging, the entry-point runner and, with the desktop extra, notifications and a tray icon."
 requires-python = ">=3.12"
 dependencies = [
@@ -18,10 +18,15 @@ desktop = [
     "sdbus-notifications>=1.0.3",
     "xdg-base-dirs>=6.1.0",
 ]
+# Shows an app's local web page in its own window (markcom.window).
+window = [
+    "markcom[desktop]",
+    "pyside6-webengine>=6.12",
+]
 
 [dependency-groups]
 dev = [
-    "markcom[desktop]",
+    "markcom[window]",
     "bandit>=1.9",
     "mypy>=2.4",
     "pip-audit>=2.10",
