@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from markcom.config import CONFIG
-from markcom.tray import Tray, TrayAction
+from markcom.tray import Tray, TrayAction, TrayTarget
 
 # No display is needed: Qt draws off screen.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -28,6 +28,32 @@ def noop():
     pass
 
 
+class FakeWindow(TrayTarget):
+    """Records each open and close; `release` holds them back so a test can click meanwhile."""
+
+    def __init__(self, *, is_open=False):
+        self.opened = is_open
+        self.calls = []
+        self.release = threading.Event()
+        self.release.set()
+        self.done = threading.Semaphore(0)
+
+    def is_open(self):
+        return self.opened
+
+    def open(self):
+        self.release.wait(WAIT_SEC)
+        self.opened = True
+        self.calls.append("open")
+        self.done.release()
+
+    def close(self):
+        self.release.wait(WAIT_SEC)
+        self.opened = False
+        self.calls.append("close")
+        self.done.release()
+
+
 @pytest.fixture
 def make_tray(tmp_path):
     """Builds a tray, entered for the test and left after it; each test gets its own, which
@@ -39,8 +65,8 @@ def make_tray(tmp_path):
     image.save(str(icon))
     with ExitStack() as stack:
 
-        def make(notifier=None, on_click=noop, actions=()):
-            return stack.enter_context(Tray("App", icon, notifier, on_click, actions))
+        def make(notifier=None, target=None, actions=()):
+            return stack.enter_context(Tray("App", icon, notifier, target or FakeWindow(), actions))
 
         yield make
 
@@ -60,18 +86,45 @@ def test_menu_shows_the_actions_then_quit(make_tray):
     assert icon().toolTip() == "App"
 
 
-@pytest.mark.parametrize(
-    ("reason", "expected"),
-    [
-        (QSystemTrayIcon.ActivationReason.Trigger, True),
-        (QSystemTrayIcon.ActivationReason.Context, False),
-    ],
-)
-def test_left_click_runs_the_click_action_and_right_click_does_not(make_tray, reason, expected):
-    ran = threading.Event()
-    make_tray(on_click=ran.set)
-    icon().activated.emit(reason)
-    assert ran.wait(WAIT_SEC if expected else 0.2) is expected
+def left_click():
+    icon().activated.emit(QSystemTrayIcon.ActivationReason.Trigger)
+
+
+def test_left_click_opens_then_the_next_closes(make_tray):
+    window = FakeWindow()
+    make_tray(target=window)
+    left_click()
+    assert window.done.acquire(timeout=WAIT_SEC)
+    left_click()
+    assert window.done.acquire(timeout=WAIT_SEC)
+    assert window.calls == ["open", "close"]
+
+
+def test_left_click_closes_a_target_opened_outside_the_tray(make_tray):
+    window = FakeWindow(is_open=True)
+    make_tray(target=window)
+    left_click()
+    assert window.done.acquire(timeout=WAIT_SEC)
+    assert window.calls == ["close"]
+
+
+def test_clicks_while_opening_are_dropped(make_tray):
+    window = FakeWindow()
+    window.release.clear()
+    make_tray(target=window)
+    for _ in range(5):
+        left_click()
+    window.release.set()
+    assert window.done.acquire(timeout=WAIT_SEC)
+    assert not window.done.acquire(timeout=0.2)
+    assert window.calls == ["open"]
+
+
+def test_right_click_does_not_open(make_tray):
+    window = FakeWindow()
+    make_tray(target=window)
+    icon().activated.emit(QSystemTrayIcon.ActivationReason.Context)
+    assert not window.done.acquire(timeout=0.2)
 
 
 def test_menu_click_returns_before_a_slow_action_and_its_failure_is_contained(make_tray):
@@ -109,7 +162,7 @@ def test_notifications_sent_through_the_tray_show_a_badge_until_a_left_click(mak
     QApplication.processEvents()
     assert sent == [("feed", "down", Urgency.Critical, 8), ("login", "down", Urgency.Critical, 8)]
     assert _has_badge()
-    icon().activated.emit(QSystemTrayIcon.ActivationReason.Trigger)
+    left_click()
     assert not _has_badge()
 
 

@@ -3,8 +3,9 @@ actions and Quit. Notifications sent through it count as unread, shown as a badg
 until the next left click."""
 
 import logging
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
@@ -33,6 +34,22 @@ BADGE_RECT: QRectF = QRectF(
 )
 
 
+class TrayTarget(ABC):
+    """What a left click opens or closes. The app may also open or close it outside the tray, so
+    is_open() reports the real state each time rather than the tray remembering its last click."""
+
+    @abstractmethod
+    def is_open(self) -> bool: ...
+
+    @abstractmethod
+    def open(self) -> None:
+        """Returns once is_open() reports True, so the next click closes it."""
+
+    @abstractmethod
+    def close(self) -> None:
+        """Returns once is_open() reports False, so the next click opens it."""
+
+
 @dataclass(frozen=True)
 class TrayAction:
     """A menu entry."""
@@ -53,16 +70,22 @@ class Tray(AbstractContextManager["Tray"]):
         name: str,
         icon: Path,
         notifier: DesktopNotifier | None,
-        on_click: Callable[[], None],
+        target: TrayTarget,
         actions: Sequence[TrayAction],
     ) -> None:
-        """A left click marks every notification read and runs `on_click`; a right click shows
+        """A left click marks every notification read and opens `target`, or closes it if it is
+        open; clicks while that is still running are dropped. A right click shows
         `actions`, then Quit. `notifier` is None for an app that sends no notifications."""
         self._app: QApplication = QApplication([name])
         self._notifier: DesktopNotifier | None = notifier
         # Changed only on the GUI thread, so it needs no lock.
         self._unread: int = 0
         self._worker: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
+        self._target: TrayTarget = target
+        # Queuing spam clicks would open and close the target over and over, so clicks are
+        # dropped until this is done. Used only on the GUI thread, so it needs no lock.
+        self._last_toggle: Future[None] = Future()
+        self._last_toggle.set_result(None)
         # Scaled to fit icon_size, up as well as down, so every icon gets the same badge.
         self._plain: QIcon = QIcon(
             QPixmap(str(icon)).scaled(
@@ -84,19 +107,33 @@ class Tray(AbstractContextManager["Tray"]):
         def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
             if reason is QSystemTrayIcon.ActivationReason.Trigger:
                 self._show_unread(0)
-                self._submit(on_click)
+                self._toggle()
 
         self._icon.setContextMenu(menu)
         self._icon.activated.connect(clicked)
 
-    def _submit(self, run: Callable[[], None]) -> None:
+    def _toggle(self) -> None:
+        if not self._last_toggle.done():
+            logger.debug("tray click dropped: the previous one is still running")
+            return
+        self._last_toggle = self._submit(self._open_or_close)
+
+    def _open_or_close(self) -> None:
+        if self._target.is_open():
+            logger.debug("tray click: closing the target")
+            self._target.close()
+        else:
+            logger.debug("tray click: opening the target")
+            self._target.open()
+
+    def _submit(self, run: Callable[[], None]) -> Future[None]:
         def guarded() -> None:
             try:
                 run()
             except ACTION_ERRORS:
                 logger.exception("tray action failed")
 
-        self._worker.submit(guarded)
+        return self._worker.submit(guarded)
 
     @override
     def __exit__(self, *_: object) -> None:
