@@ -176,3 +176,8 @@ def test_quit_ends_run(make_tray):
     tray = make_tray()
     QTimer.singleShot(0, icon().contextMenu().actions()[-1].trigger)
     tray.run()
+
+
+def test_the_tray_does_not_quit_when_its_last_window_closes(make_tray):
+    make_tray()
+    assert not QApplication.instance().quitOnLastWindowClosed()

@@ -77,6 +77,8 @@ class Tray(AbstractContextManager["Tray"]):
         open; clicks while that is still running are dropped. A right click shows
         `actions`, then Quit. `notifier` is None for an app that sends no notifications."""
         self._app: QApplication = QApplication([name])
+        # A tray app's windows come and go; only Quit ends it.
+        self._app.setQuitOnLastWindowClosed(False)
         self._notifier: DesktopNotifier | None = notifier
         # Changed only on the GUI thread, so it needs no lock.
         self._unread: int = 0
