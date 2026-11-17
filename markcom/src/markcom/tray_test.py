@@ -30,7 +30,7 @@ def noop():
 
 
 class FakeWindow(TrayTarget):
-    """Records each open and close, and whether it ran on the GUI (main) thread."""
+    """Records each open/close and whether it ran on the GUI thread."""
 
     def __init__(self, *, is_open=False):
         self.opened = is_open

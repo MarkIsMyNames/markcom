@@ -38,8 +38,8 @@ class TrayTarget(ABC):
     """What a left click opens or closes. The app may also open or close it outside the tray, so
     is_open() reports the real state each time rather than the tray remembering its last click.
 
-    The tray calls these on the GUI thread, so each must return quickly; a target with slow work
-    hands that work to a worker of its own."""
+    Called on the GUI thread, so each must return fast; slow work goes to the target's own
+    worker."""
 
     @abstractmethod
     def is_open(self) -> bool: ...
@@ -71,8 +71,8 @@ class TrayAction:
 class Tray(AbstractContextManager["Tray"]):
     """Tray icon; build it and call run() on the main thread.
 
-    A left click toggles the target on the GUI thread, as Qt widgets require. The menu's actions
-    run one at a time on the tray's own worker, so a slow one cannot freeze the menu.
+    Left click toggles the target on the GUI thread, as Qt widgets require. Menu actions run one
+    at a time on the tray's worker, so a slow one can't freeze the menu.
     """
 
     def __init__(

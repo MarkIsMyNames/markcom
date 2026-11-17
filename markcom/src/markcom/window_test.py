@@ -14,8 +14,8 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from markcom.window import Application, WebWindow
 
-# No display is needed: Qt draws off screen. CI runners block Chromium's namespace sandbox, and
-# these tests load only pages they serve themselves.
+# no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
+# pages.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 
@@ -297,11 +297,11 @@ def test_another_origin_in_an_iframe_loads_in_the_page(browser, site, other_site
 
 
 def run_a_window_without_a_tray(url, icon):
-    """Child process body: only a child may run exec(), which ends WebEngine for its process."""
+    """Child process: exec() ends WebEngine for the whole process."""
     window = WebWindow("Solo", HttpUrl(url), icon)
     with Application("Solo") as app:
         window.open()
-        # A posted call waits for the event loop, so it runs once exec() has started.
+        # posted call runs once exec() starts
         QTimer.singleShot(0, window.close)
         app.exec()
 

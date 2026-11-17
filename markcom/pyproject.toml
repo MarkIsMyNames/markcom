@@ -18,7 +18,7 @@ desktop = [
     "sdbus-notifications>=1.0.3",
     "xdg-base-dirs>=6.1.0",
 ]
-# Shows an app's local web page in its own window (markcom.window).
+# Web window (markcom.window); own extra, as WebEngine adds ~176 MB tray-only apps skip.
 window = [
     "markcom[desktop]",
     "pyside6-webengine>=6.12",
