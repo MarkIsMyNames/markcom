@@ -20,7 +20,7 @@ dependencies = ["markcom"]
 markcom = { git = "https://github.com/MarkIsMyNames/markcom", subdirectory = "markcom", tag = "markcom-v<version>" }
 ```
 
-The `window` extra (`markcom[window]`) adds `markcom.window`, which shows a web frontend in its own window with QtWebEngine. It downloads about 176 MB more on Linux (pyside6-webengine plus pyside6-addons).
+The `window` extra (`markcom[window]`) adds `markcom.window`, which shows a web frontend in its own window with QtWebEngine. It downloads about 176 MB more on Linux (pyside6-webengine plus pyside6-addons). The window keeps no cookies or site storage between runs, and it does not download files.
 
 TypeScript, from npm:
 
