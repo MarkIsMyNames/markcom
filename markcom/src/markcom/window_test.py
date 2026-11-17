@@ -7,12 +7,12 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from pydantic import HttpUrl
-from PySide6.QtCore import QDeadlineTimer, QEventLoop, QObject, QPoint, QSize, QUrl, Slot
+from PySide6.QtCore import QDeadlineTimer, QEventLoop, QObject, QPoint, QSize, QTimer, QUrl, Slot
 from PySide6.QtGui import QColor, QDesktopServices, QImage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QWidget
 
-from markcom.window import WebWindow
+from markcom.window import WebWindow, WindowApp
 
 # No display is needed: Qt draws off screen. CI runners block Chromium's namespace sandbox, and
 # these tests load only pages they serve themselves.
@@ -303,3 +303,25 @@ def test_methods_without_an_application_fail_fast(icon):
     child.start()
     child.join(60)
     assert child.exitcode == 3
+
+
+def run_a_window_app(url, icon):
+    """Child process body: only a child may run exec(), which ends WebEngine for its process."""
+    window = WebWindow("Solo", HttpUrl(url), icon)
+    with WindowApp("Solo", window) as app:
+        QTimer.singleShot(0, window.close)
+        app.run()
+
+
+def test_a_window_app_ends_when_its_window_closes(site, icon):
+    child = multiprocessing.get_context("spawn").Process(
+        target=run_a_window_app, args=(f"{site}/index.html", icon)
+    )
+    child.start()
+    try:
+        child.join(60)
+        assert child.exitcode == 0
+    finally:
+        if child.is_alive():
+            child.kill()
+            child.join()

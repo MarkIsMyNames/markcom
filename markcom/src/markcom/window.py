@@ -4,6 +4,7 @@ QApplication is created: QtWebEngine must be loaded first."""
 import logging
 from collections.abc import Callable
 from concurrent.futures import Future
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import override
 
@@ -140,3 +141,23 @@ class WebWindow(TrayTarget):
         holder.setWindowIcon(QIcon(str(self._icon)))
         holder.resize(CONFIG.window.width, CONFIG.window.height)
         return holder
+
+
+class WindowApp(AbstractContextManager["WindowApp"]):
+    """The application for an app with no tray: build it and call run() on the main thread."""
+
+    def __init__(self, name: str, window: WebWindow) -> None:
+        # Qt's default, quit when the last window closes, is kept: with no tray, closing the
+        # only window ends the app.
+        self._app: QApplication = QApplication([name])
+        self._window: WebWindow = window
+
+    @override
+    def __exit__(self, *_: object) -> None:
+        # Release the application, as Qt allows only one at a time.
+        self._app.shutdown()
+
+    def run(self) -> None:
+        """Open the window and block until it is closed."""
+        self._window.open()
+        self._app.exec()
