@@ -1,7 +1,7 @@
 [project]
 name = "markcom"
 version = "0.3.0"
-description = "Shared code for Python projects: typed config, .env secrets, logging, the entry-point runner and, with the desktop extra, notifications and a tray icon, and with the window extra, a web frontend in its own window."
+description = "Shared code for Python projects: typed config, .env secrets, logging and the entry-point runner; with the desktop extra, notifications and a tray icon; with the window extra, a web frontend in its own window."
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.14",

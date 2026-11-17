@@ -41,7 +41,8 @@ def _on_gui_thread[T](work: Callable[[], T]) -> T:
             result.set_result(work())
         except BaseException as error:
             result.set_exception(error)
-            # The caller gets the error through the Future; the re-raise keeps it visible here.
+            # The caller gets the error through the Future; re-raising also reports it on the
+            # GUI thread.
             raise
 
     QTimer.singleShot(0, app, run)
@@ -159,8 +160,7 @@ def _application(name: str) -> Iterator[QApplication]:
 def run_without_tray(name: str, window: WebWindow) -> None:
     """Run `window` as an app with no tray, on the main thread: open it and block until it is
     closed."""
-    # Qt's default, quit when the last window closes, is kept: with no tray, closing the
-    # only window ends the app.
+    # Qt's default stays on: with no tray, closing the last window must end the app.
     with _application(name) as app:
         window.open()
         app.exec()

@@ -84,7 +84,7 @@ class TrayConfig(StrictModel):
 
 
 class WindowConfig(StrictModel):
-    """The web window."""
+    """The web window: its starting size in pixels, and how long another thread waits for it."""
 
     # The size the window first opens at; Qt keeps the user's size after that.
     width: Pixels
