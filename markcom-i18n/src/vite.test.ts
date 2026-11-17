@@ -1,6 +1,7 @@
 import en from '../e2e/site/locales/en.json' with { type: 'json' };
 import ga from '../e2e/site/locales/ga.json' with { type: 'json' };
 import { locales } from '../e2e/site/locales.ts';
+import type { IndexHtmlTransformContext } from 'vite';
 import { LocaleSet, type LocaleRecord } from './locales.ts';
 import { localeHtmlPlugin } from './vite.ts';
 
@@ -9,7 +10,12 @@ function plugin(site: LocaleSet<string, LocaleRecord>) {
   const hooks = localeHtmlPlugin({ locales: site, values: new Map([['colour', 'white']]) });
   return {
     buildStart: (hooks.buildStart as () => void).bind(hooks),
-    transform: (hooks.transformIndexHtml as { handler: (html: string) => string }).handler,
+    transform: (html: string, path = '/index.html') =>
+      (
+        hooks.transformIndexHtml as {
+          handler: (html: string, context: IndexHtmlTransformContext) => string;
+        }
+      ).handler(html, { path, filename: `/site${path}` }),
   };
 }
 
@@ -37,6 +43,11 @@ describe('localeHtmlPlugin', () => {
         'index.html: #fff is a hard-coded colour; use {{name}}',
       ].join('\n'),
     );
+  });
+
+  it("leaves other HTML pages, such as Storybook's iframe.html, as they are", () => {
+    const html = '<title>Storybook</title><div>{__VITEST_INJECTOR__}</div>';
+    expect(plugin(locales).transform(html, '/iframe.html')).toBe(html);
   });
 
   it.each([
