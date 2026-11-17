@@ -1,7 +1,7 @@
 import { checkInvalidTranslations, checkMissingTranslations } from '@lingual/i18n-check';
 import escapeHtml from 'escape-html';
 import { flatten } from 'flat';
-import type { Plugin } from 'vite';
+import type { IndexHtmlTransformContext, Plugin } from 'vite';
 import { leafKeys, lookupString, type LocaleRecord, type LocaleSet } from './locales.js';
 
 /** index.html placeholders filled by localeHtmlPlugin. */
@@ -10,6 +10,8 @@ const TEXT_BETWEEN_TAGS: RegExp = /(?<=>)[^<>]+(?=<)/g;
 const TEXT_ATTRIBUTE: RegExp =
   /(?<= (?:content|title|alt|aria-label|aria-description|placeholder)=")[^"]*(?=")/g;
 const HEX_COLOUR: RegExp = /#[0-9a-f]{3,8}\b/gi;
+/** The site's page. Storybook and Vitest serve their own HTML through the same Vite config. */
+const SITE_HTML_PATH: string = '/index.html';
 const CHECK_OPTIONS: { format: 'i18next' } = { format: 'i18next' };
 /** Meta content that is configuration, not text a person reads. */
 const ALLOWED_META_CONTENT: ReadonlySet<string> = new Set(['width=device-width, initial-scale=1']);
@@ -167,9 +169,12 @@ export function localeHtmlPlugin<Lang extends string, Locale extends LocaleRecor
       failOnProblems(findLocaleProblems(options.locales));
     },
     transformIndexHtml: {
-      // Before Vite adds its own scripts, so only the site's index.html is checked.
+      // Before Vite adds its own scripts, so the checks see only the site's own markup.
       order: 'pre',
-      handler: (html: string): string => {
+      handler: (html: string, context: IndexHtmlTransformContext): string => {
+        if (context.path !== SITE_HTML_PATH) {
+          return html;
+        }
         failOnProblems(findIndexHtmlProblems(html));
         return renderLocaleHtml(html, options.locales.defaultLocale, values);
       },
