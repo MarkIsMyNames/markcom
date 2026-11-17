@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Self, override
 
 from pydantic import HttpUrl
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWebEngineCore import (
     QWebEngineNavigationRequest,
@@ -87,8 +87,12 @@ class WebWindow(TrayTarget):
     def open(self) -> None:
         if self._holder is None:
             self._holder = self._build()
-        self._holder.setWindowState(self._holder.windowState() & ~Qt.WindowState.WindowMinimized)
-        self._holder.show()
+        # show() alone leaves a minimised window minimised, and showNormal() would also drop
+        # maximised, which Qt still records while the window is minimised.
+        if self._holder.isMaximized():
+            self._holder.showMaximized()
+        else:
+            self._holder.showNormal()
 
     @override
     def close(self) -> None:

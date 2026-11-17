@@ -233,6 +233,16 @@ def test_open_brings_a_minimised_window_back(make_window):
     assert not shown().isMinimized()
 
 
+def test_a_window_minimised_while_maximised_comes_back_maximised(make_window):
+    window = make_window()
+    window.open()
+    shown().showMaximized()
+    shown().showMinimized()
+    window.open()
+    assert window.is_open()
+    assert shown().isMaximized()
+
+
 def test_a_same_origin_link_loads_in_the_window(make_window, browser):
     make_window().open()
     assert wait_until(lambda: view().title() == "Home")
