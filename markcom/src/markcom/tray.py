@@ -16,6 +16,7 @@ from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from markcom.config import CONFIG
 from markcom.notifier import DesktopNotifier
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -23,18 +24,13 @@ logger: logging.Logger = logging.getLogger(__name__)
 # What a menu action may fail with (files: OSError, ValueError; browser: OSError; desktop:
 # RuntimeError). They are logged so the tray keeps running; anything else is a bug and raises.
 ACTION_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, RuntimeError)
-# Edge in pixels of the icon the badge is drawn on; the desktop scales it to the panel.
-ICON_SIZE: int = 64
-# The badge's edge in pixels, in the icon's bottom-right corner, as messaging apps draw theirs.
-BADGE_SIZE: int = 28
-# Its count's height in pixels.
-BADGE_TEXT_SIZE: int = 20
-# Where the badge is drawn, leaving 3 pixels to the icon's edge so the panel does not clip it.
+# Where the badge is drawn, badge_margin pixels in from the icon's bottom-right corner.
 BADGE_RECT: QRectF = QRectF(
-    ICON_SIZE - BADGE_SIZE - 3, ICON_SIZE - BADGE_SIZE - 3, BADGE_SIZE, BADGE_SIZE
+    CONFIG.tray.icon_size - CONFIG.tray.badge_size - CONFIG.tray.badge_margin,
+    CONFIG.tray.icon_size - CONFIG.tray.badge_size - CONFIG.tray.badge_margin,
+    CONFIG.tray.badge_size,
+    CONFIG.tray.badge_size,
 )
-BADGE_COLOUR: QColor = QColor("#d32f2f")
-BADGE_TEXT_COLOUR: QColor = QColor("#ffffff")
 
 
 @dataclass(frozen=True)
@@ -67,11 +63,11 @@ class Tray(AbstractContextManager["Tray"]):
         # Changed only on the GUI thread, so it needs no lock.
         self._unread: int = 0
         self._worker: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
-        # Scaled to fit ICON_SIZE, up as well as down, so every icon gets the same badge.
+        # Scaled to fit icon_size, up as well as down, so every icon gets the same badge.
         self._plain: QIcon = QIcon(
             QPixmap(str(icon)).scaled(
-                ICON_SIZE,
-                ICON_SIZE,
+                CONFIG.tray.icon_size,
+                CONFIG.tray.icon_size,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
@@ -127,20 +123,20 @@ class Tray(AbstractContextManager["Tray"]):
         self._icon.setIcon(QIcon(self._badged(count)))
 
     def _badged(self, count: int) -> QPixmap:
-        """The icon centred on an ICON_SIZE square, with `count` in the badge unless it is 0."""
-        pixmap: QPixmap = QPixmap(ICON_SIZE, ICON_SIZE)
+        """The icon centred on an icon_size square, with `count` in the badge unless it is 0."""
+        pixmap: QPixmap = QPixmap(CONFIG.tray.icon_size, CONFIG.tray.icon_size)
         pixmap.fill(Qt.GlobalColor.transparent)
         with QPainter(pixmap) as painter:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             self._plain.paint(painter, pixmap.rect())
             if count:
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(BADGE_COLOUR)
+                painter.setBrush(QColor(CONFIG.tray.badge_colour))
                 painter.drawEllipse(BADGE_RECT)
                 font: QFont = painter.font()
                 font.setBold(True)
-                font.setPixelSize(BADGE_TEXT_SIZE)
+                font.setPixelSize(CONFIG.tray.badge_text_size)
                 painter.setFont(font)
-                painter.setPen(BADGE_TEXT_COLOUR)
+                painter.setPen(QColor(CONFIG.tray.badge_text_colour))
                 painter.drawText(BADGE_RECT, Qt.AlignmentFlag.AlignCenter, str(count))
         return pixmap

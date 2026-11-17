@@ -8,7 +8,8 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
-from markcom.tray import BADGE_COLOUR, Tray, TrayAction
+from markcom.config import CONFIG
+from markcom.tray import Tray, TrayAction
 
 # No display is needed: Qt draws off screen.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -93,7 +94,7 @@ def test_menu_click_returns_before_a_slow_action_and_its_failure_is_contained(ma
 def _has_badge():
     image = icon().icon().pixmap(64, 64).toImage().convertToFormat(QImage.Format.Format_RGB32)
     return any(
-        image.pixelColor(x, y) == BADGE_COLOUR
+        image.pixelColor(x, y) == QColor(CONFIG.tray.badge_colour)
         for x in range(image.width())
         for y in range(image.height())
     )

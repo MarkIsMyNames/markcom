@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import HttpUrl
 
-from markcom.config import BaseAppConfig, ConfigError, load_config
+from markcom.config import BaseAppConfig, ConfigError, LogFormat, StrictModel, load_config
 
 
 class ExampleConfig(BaseAppConfig):
@@ -61,3 +61,20 @@ def test_config_is_immutable(tmp_path):
     config = load_config(write(tmp_path, VALID), ExampleConfig)
     with pytest.raises(ValueError, match="frozen"):
         config.workers = 8
+
+
+class FormatConfig(StrictModel):
+    log_format: LogFormat
+
+
+def test_accepts_a_valid_log_format(tmp_path):
+    path = write(tmp_path, {"log_format": "%(asctime)s %(levelname)s: %(message)s"})
+    assert load_config(path, FormatConfig).log_format == "%(asctime)s %(levelname)s: %(message)s"
+
+
+@pytest.mark.parametrize(
+    "log_format", ["%(nope)s", "100% %(message)s", "plain text", "%(message)d"]
+)
+def test_rejects_an_invalid_log_format(tmp_path, log_format):
+    with pytest.raises(ConfigError):
+        load_config(write(tmp_path, {"log_format": log_format}), FormatConfig)

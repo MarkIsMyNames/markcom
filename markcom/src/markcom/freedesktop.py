@@ -16,13 +16,12 @@ from sdbus_block.notifications import FreedesktopNotifications
 from slugify import slugify
 from xdg_base_dirs import xdg_data_dirs, xdg_data_home
 
+from markcom.config import CONFIG
 from markcom.notification_backend import NotificationBackend, NotificationError
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 MS_PER_SEC: int = 1000
-# Names the app a written .desktop file belongs to, so no other file is ever taken over.
-OWNER_KEY: str = "X-Markcom-App"
 ENTRY_SECTION: str = "Desktop Entry"
 APPLICATIONS: str = "applications"
 DESKTOP_SUFFIX: str = ".desktop"
@@ -129,7 +128,10 @@ def install_desktop_entry(app_name: str, icon: Path, data_home: Path) -> str:
         if path.is_file():
             existing: DesktopFile = DesktopFile()
             existing.read(path, encoding="utf-8")
-            if existing.get(ENTRY_SECTION, OWNER_KEY, fallback=None) != app_name:
+            if (
+                existing.get(ENTRY_SECTION, CONFIG.desktop_entry_owner_key, fallback=None)
+                != app_name
+            ):
                 conflict: str = (
                     f"{path} belongs to another application; pass its ID as desktop_entry"
                 )
@@ -143,7 +145,7 @@ def install_desktop_entry(app_name: str, icon: Path, data_home: Path) -> str:
             "Icon": str(icon.resolve()),
             "Exec": "true",
             "NoDisplay": "true",
-            OWNER_KEY: app_name,
+            CONFIG.desktop_entry_owner_key: app_name,
         }
         applications_dir.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as file:
