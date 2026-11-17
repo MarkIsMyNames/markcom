@@ -98,6 +98,8 @@ class WebWindow(TrayTarget):
         self._title: str = title
         self._url: HttpUrl = url
         self._icon: Path = icon
+        # None until the first open(): a widget cannot exist before the QApplication, which
+        # Tray or run_without_tray creates after this object.
         self._holder: QWidget | None = None
 
     @override
