@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import override
 
 from pydantic import HttpUrl
-from PySide6.QtCore import QThread, QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QThread, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon
+from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest, QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
@@ -42,6 +43,50 @@ def _on_gui_thread[T](work: Callable[[], T]) -> T:
 
     QTimer.singleShot(0, app, run)
     return result.result()
+
+
+WEB_SCHEMES: frozenset[str] = frozenset({"http", "https"})
+
+
+class _OwnOriginPage(QWebEnginePage):
+    """A page that stays on one origin: other web links go to the default browser."""
+
+    def __init__(self, origin: QUrl, parent: QWidget) -> None:
+        super().__init__(parent)
+        self._origin: QUrl = origin
+        self.newWindowRequested.connect(self._on_new_window)
+
+    @override
+    def acceptNavigationRequest(
+        self, url: QUrl | str, type_: QWebEnginePage.NavigationType, is_main_frame: bool
+    ) -> bool:
+        target: QUrl = QUrl(url)
+        if not is_main_frame or self._is_own_origin(target):
+            return True
+        self._send_away(target)
+        return False
+
+    def _is_own_origin(self, url: QUrl) -> bool:
+        return (
+            url.scheme() == self._origin.scheme()
+            and url.host() == self._origin.host()
+            and url.port() == self._origin.port()
+        )
+
+    def _send_away(self, url: QUrl) -> None:
+        # Scheme and host only: a URL can carry a token.
+        if url.scheme() in WEB_SCHEMES:
+            logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
+            QDesktopServices.openUrl(url)
+        else:
+            logger.warning("Refused a %s link to %s", url.scheme(), url.host())
+
+    def _on_new_window(self, request: QWebEngineNewWindowRequest) -> None:
+        url: QUrl = request.requestedUrl()
+        if self._is_own_origin(url):
+            self.load(url)
+        else:
+            self._send_away(url)
 
 
 class WebWindow(TrayTarget):
@@ -88,7 +133,9 @@ class WebWindow(TrayTarget):
         layout.setContentsMargins(0, 0, 0, 0)
         view: QWebEngineView = QWebEngineView(holder)
         layout.addWidget(view)
-        view.load(str(self._url))
+        start: QUrl = QUrl(str(self._url))
+        view.setPage(_OwnOriginPage(start, holder))
+        view.load(start)
         holder.setWindowTitle(self._title)
         holder.setWindowIcon(QIcon(str(self._icon)))
         holder.resize(CONFIG.window.width, CONFIG.window.height)

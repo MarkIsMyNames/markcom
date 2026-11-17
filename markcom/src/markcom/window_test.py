@@ -7,8 +7,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from pydantic import HttpUrl
-from PySide6.QtCore import QDeadlineTimer, QEventLoop, QPoint, QSize
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtCore import QDeadlineTimer, QEventLoop, QObject, QPoint, QSize, QUrl, Slot
+from PySide6.QtGui import QColor, QDesktopServices, QImage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -28,14 +28,51 @@ class QuietHandler(SimpleHTTPRequestHandler):
         pass
 
 
-@pytest.fixture(scope="module")
-def site(tmp_path_factory):
-    folder = tmp_path_factory.mktemp("site")
-    (folder / "index.html").write_text("<title>Home</title>", encoding="utf-8")
-    (folder / "two.html").write_text("<title>Two</title>", encoding="utf-8")
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(folder)))
+class RecordingHandler(QuietHandler):
+    requests = None
+
+    def do_GET(self):
+        self.requests.append(self.path)
+        super().do_GET()
+
+
+def serve(folder, handler):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(handler, directory=str(folder)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_address[1]}"
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+@pytest.fixture(scope="module")
+def other_site(tmp_path_factory):
+    folder = tmp_path_factory.mktemp("other")
+    (folder / "inner.html").write_text("<title>Inner</title>", encoding="utf-8")
+    requests = []
+    handler = type("Handler", (RecordingHandler,), {"requests": requests})
+    server, base = serve(folder, handler)
+    yield base, requests
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture(scope="module")
+def site(tmp_path_factory, other_site):
+    folder = tmp_path_factory.mktemp("site")
+    links = (
+        '<a id=same href="/two.html">s</a>'
+        '<a id=other href="https://example.org/x">o</a>'
+        '<a id=other-new target=_blank href="https://example.org/new">n</a>'
+        '<a id=same-new target=_blank href="/two.html">m</a>'
+        '<a id=mail href="mailto:a@example.org">a</a>'
+        '<a id=smb href="smb://fileserver/share">f</a>'
+    )
+    (folder / "index.html").write_text(f"<title>Home</title>{links}", encoding="utf-8")
+    (folder / "two.html").write_text("<title>Two</title>", encoding="utf-8")
+    (folder / "frame.html").write_text(
+        f'<title>Frame</title><iframe src="{other_site[0]}/inner.html"></iframe>',
+        encoding="utf-8",
+    )
+    server, base = serve(folder, QuietHandler)
+    yield base
     server.shutdown()
     server.server_close()
 
@@ -45,6 +82,28 @@ def qt_app():
     app = QApplication(["window-test"])
     yield app
     app.shutdown()
+
+
+class Browser(QObject):
+    def __init__(self):
+        super().__init__()
+        self.urls = []
+
+    @Slot(QUrl)
+    def record(self, url):
+        self.urls.append(url.toString())
+
+
+@pytest.fixture
+def browser(request):
+    request.getfixturevalue("qt_app")
+    recorder = Browser()
+    schemes = ("https", "mailto", "smb")
+    for scheme in schemes:
+        QDesktopServices.setUrlHandler(scheme, recorder, "record")
+    yield recorder
+    for scheme in schemes:
+        QDesktopServices.unsetUrlHandler(scheme)
 
 
 @pytest.fixture
@@ -91,6 +150,10 @@ def shown() -> QWidget:
 
 def view() -> QWebEngineView:
     return shown().findChild(QWebEngineView)
+
+
+def click(link_id):
+    view().page().runJavaScript(f"document.getElementById('{link_id}').click()")
 
 
 def set_marker():
@@ -168,6 +231,59 @@ def test_open_and_close_from_another_thread_return_with_the_state_changed(make_w
     assert wait_until(lambda: not thread.is_alive())
     thread.join()
     assert records == [True, False]
+
+
+def test_a_same_origin_link_loads_in_the_window(make_window, browser):
+    make_window().open()
+    assert wait_until(lambda: view().title() == "Home")
+    click("same")
+    assert wait_until(lambda: view().title() == "Two")
+    assert browser.urls == []
+
+
+def test_another_origin_opens_in_the_browser_not_the_window(make_window, browser):
+    make_window().open()
+    assert wait_until(lambda: view().title() == "Home")
+    click("other")
+    assert wait_until(lambda: browser.urls == ["https://example.org/x"])
+    assert view().title() == "Home"
+
+
+def test_a_new_window_link_to_another_origin_opens_in_the_browser(make_window, browser):
+    make_window().open()
+    assert wait_until(lambda: view().title() == "Home")
+    click("other-new")
+    assert wait_until(lambda: browser.urls == ["https://example.org/new"])
+    assert view().title() == "Home"
+
+
+def test_a_same_origin_new_window_link_loads_in_the_window(make_window, browser):
+    make_window().open()
+    assert wait_until(lambda: view().title() == "Home")
+    click("same-new")
+    assert wait_until(lambda: view().title() == "Two")
+    assert browser.urls == []
+
+
+@pytest.mark.parametrize("link_id", ["mail", "smb"])
+def test_non_web_links_neither_load_nor_reach_the_desktop(make_window, browser, link_id):
+    make_window().open()
+    assert wait_until(lambda: view().title() == "Home")
+    click(link_id)
+    wait_until(lambda: False)
+    assert browser.urls == []
+    assert view().title() == "Home"
+
+
+@pytest.mark.usefixtures("qt_app")
+def test_another_origin_in_an_iframe_loads_in_the_page(browser, site, other_site, icon):
+    window = WebWindow("App", HttpUrl(f"{site}/frame.html"), icon)
+    try:
+        window.open()
+        assert wait_until(lambda: "/inner.html" in other_site[1])
+        assert browser.urls == []
+    finally:
+        window.close()
 
 
 def open_without_an_application(icon):
