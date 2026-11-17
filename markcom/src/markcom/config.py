@@ -64,6 +64,7 @@ CONFIG_PATH: Path = Path(__file__).with_name("config.json")
 
 type HexColour = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 type Pixels = Annotated[int, Field(gt=0)]
+type Seconds = Annotated[int, Field(gt=0)]
 type PixelGap = Annotated[int, Field(ge=0)]
 
 
@@ -88,6 +89,8 @@ class WindowConfig(StrictModel):
     # The size the window first opens at; Qt keeps the user's size after that.
     width: Pixels
     height: Pixels
+    # Above Chromium's cold start, so a first open succeeds; short enough that Quit still finishes.
+    gui_wait_sec: Seconds
 
 
 class MarkcomConfig(StrictModel):

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import override
 
 from pydantic import HttpUrl
-from PySide6.QtCore import QThread, QTimer, QUrl
+from PySide6.QtCore import QCoreApplication, Qt, QThread, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest, QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -23,11 +23,8 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 def _on_gui_thread[T](work: Callable[[], T]) -> T:
     """Run `work` on the main thread and return its result, or raise what it raised."""
-    app: QApplication | None = None
-    instance = QApplication.instance()
-    if isinstance(instance, QApplication):
-        app = instance
-    if app is None:
+    app: QCoreApplication | None = QApplication.instance()
+    if app is None or not isinstance(app, QApplication):
         # Qt aborts the whole process if a widget is built with no application.
         no_app: str = "no QApplication: build a Tray or a WindowApp before using a WebWindow"
         raise RuntimeError(no_app)
@@ -40,10 +37,11 @@ def _on_gui_thread[T](work: Callable[[], T]) -> T:
             result.set_result(work())
         except BaseException as error:
             result.set_exception(error)
+            # The caller gets the error through the Future; the re-raise keeps it visible here.
             raise
 
     QTimer.singleShot(0, app, run)
-    return result.result()
+    return result.result(timeout=CONFIG.window.gui_wait_sec)
 
 
 WEB_SCHEMES: frozenset[str] = frozenset({"http", "https"})
@@ -113,11 +111,14 @@ class WebWindow(TrayTarget):
         _on_gui_thread(self._hide)
 
     def _is_visible(self) -> bool:
-        return self._holder is not None and self._holder.isVisible()
+        return (
+            self._holder is not None and self._holder.isVisible() and not self._holder.isMinimized()
+        )
 
     def _show(self) -> None:
         if self._holder is None:
             self._holder = self._build()
+        self._holder.setWindowState(self._holder.windowState() & ~Qt.WindowState.WindowMinimized)
         self._holder.show()
         self._holder.raise_()
         self._holder.activateWindow()
