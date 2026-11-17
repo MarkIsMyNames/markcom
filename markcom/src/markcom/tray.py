@@ -5,7 +5,7 @@ until the next left click."""
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
@@ -36,7 +36,10 @@ BADGE_RECT: QRectF = QRectF(
 
 class TrayTarget(ABC):
     """What a left click opens or closes. The app may also open or close it outside the tray, so
-    is_open() reports the real state each time rather than the tray remembering its last click."""
+    is_open() reports the real state each time rather than the tray remembering its last click.
+
+    The tray calls these on the GUI thread, so each must return quickly; a target with slow work
+    hands that work to a worker of its own."""
 
     @abstractmethod
     def is_open(self) -> bool: ...
@@ -50,6 +53,13 @@ class TrayTarget(ABC):
         """Returns once is_open() reports False, so the next click opens it."""
 
 
+def _run_logged(run: Callable[[], None]) -> None:
+    try:
+        run()
+    except ACTION_ERRORS:
+        logger.exception("tray action failed")
+
+
 @dataclass(frozen=True)
 class TrayAction:
     """A menu entry."""
@@ -61,8 +71,8 @@ class TrayAction:
 class Tray(AbstractContextManager["Tray"]):
     """Tray icon; build it and call run() on the main thread.
 
-    The click and the menu's actions run one at a time on the tray's own worker, so a slow one
-    cannot freeze the menu.
+    A left click toggles the target on the GUI thread, as Qt widgets require. The menu's actions
+    run one at a time on the tray's own worker, so a slow one cannot freeze the menu.
     """
 
     def __init__(
@@ -74,8 +84,8 @@ class Tray(AbstractContextManager["Tray"]):
         actions: Sequence[TrayAction],
     ) -> None:
         """A left click marks every notification read and opens `target`, or closes it if it is
-        open; clicks while that is still running are dropped. A right click shows
-        `actions`, then Quit. `notifier` is None for an app that sends no notifications."""
+        open. A right click shows `actions`, then Quit. `notifier` is None for an app that sends
+        no notifications."""
         self._app: QApplication = QApplication([name])
         # A tray app's windows come and go; only Quit ends it.
         self._app.setQuitOnLastWindowClosed(False)
@@ -84,10 +94,6 @@ class Tray(AbstractContextManager["Tray"]):
         self._unread: int = 0
         self._worker: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
         self._target: TrayTarget = target
-        # Queuing spam clicks would open and close the target over and over, so clicks are
-        # dropped until this is done. Used only on the GUI thread, so it needs no lock.
-        self._last_toggle: Future[None] = Future()
-        self._last_toggle.set_result(None)
         # Scaled to fit icon_size, up as well as down, so every icon gets the same badge.
         self._plain: QIcon = QIcon(
             QPixmap(str(icon)).scaled(
@@ -109,16 +115,10 @@ class Tray(AbstractContextManager["Tray"]):
         def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
             if reason is QSystemTrayIcon.ActivationReason.Trigger:
                 self._show_unread(0)
-                self._toggle()
+                _run_logged(self._open_or_close)
 
         self._icon.setContextMenu(menu)
         self._icon.activated.connect(clicked)
-
-    def _toggle(self) -> None:
-        if not self._last_toggle.done():
-            logger.debug("tray click dropped: the previous one is still running")
-            return
-        self._last_toggle = self._submit(self._open_or_close)
 
     def _open_or_close(self) -> None:
         if self._target.is_open():
@@ -128,14 +128,8 @@ class Tray(AbstractContextManager["Tray"]):
             logger.debug("tray click: opening the target")
             self._target.open()
 
-    def _submit(self, run: Callable[[], None]) -> Future[None]:
-        def guarded() -> None:
-            try:
-                run()
-            except ACTION_ERRORS:
-                logger.exception("tray action failed")
-
-        return self._worker.submit(guarded)
+    def _submit(self, run: Callable[[], None]) -> None:
+        self._worker.submit(_run_logged, run)
 
     @override
     def __exit__(self, *_: object) -> None:

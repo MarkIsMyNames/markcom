@@ -1,6 +1,7 @@
 import os
 import threading
 from contextlib import ExitStack
+from typing import override
 
 import pytest
 from desktop_notifier import Urgency
@@ -29,29 +30,29 @@ def noop():
 
 
 class FakeWindow(TrayTarget):
-    """Records each open and close; `release` holds them back so a test can click meanwhile."""
+    """Records each open and close, and whether it ran on the GUI (main) thread."""
 
     def __init__(self, *, is_open=False):
         self.opened = is_open
         self.calls = []
-        self.release = threading.Event()
-        self.release.set()
-        self.done = threading.Semaphore(0)
+        self.on_main_thread = []
 
+    @override
     def is_open(self):
         return self.opened
 
+    @override
     def open(self):
-        self.release.wait(WAIT_SEC)
-        self.opened = True
-        self.calls.append("open")
-        self.done.release()
+        self._record("open", opened=True)
 
+    @override
     def close(self):
-        self.release.wait(WAIT_SEC)
-        self.opened = False
-        self.calls.append("close")
-        self.done.release()
+        self._record("close", opened=False)
+
+    def _record(self, call, *, opened):
+        self.opened = opened
+        self.calls.append(call)
+        self.on_main_thread.append(threading.current_thread() is threading.main_thread())
 
 
 @pytest.fixture
@@ -94,37 +95,29 @@ def test_left_click_opens_then_the_next_closes(make_tray):
     window = FakeWindow()
     make_tray(target=window)
     left_click()
-    assert window.done.acquire(timeout=WAIT_SEC)
     left_click()
-    assert window.done.acquire(timeout=WAIT_SEC)
     assert window.calls == ["open", "close"]
+
+
+def test_left_click_runs_the_target_on_the_gui_thread(make_tray):
+    window = FakeWindow()
+    make_tray(target=window)
+    left_click()
+    assert window.on_main_thread == [True]
 
 
 def test_left_click_closes_a_target_opened_outside_the_tray(make_tray):
     window = FakeWindow(is_open=True)
     make_tray(target=window)
     left_click()
-    assert window.done.acquire(timeout=WAIT_SEC)
     assert window.calls == ["close"]
-
-
-def test_clicks_while_opening_are_dropped(make_tray):
-    window = FakeWindow()
-    window.release.clear()
-    make_tray(target=window)
-    for _ in range(5):
-        left_click()
-    window.release.set()
-    assert window.done.acquire(timeout=WAIT_SEC)
-    assert not window.done.acquire(timeout=0.2)
-    assert window.calls == ["open"]
 
 
 def test_right_click_does_not_open(make_tray):
     window = FakeWindow()
     make_tray(target=window)
     icon().activated.emit(QSystemTrayIcon.ActivationReason.Context)
-    assert not window.done.acquire(timeout=0.2)
+    assert window.calls == []
 
 
 def test_menu_click_returns_before_a_slow_action_and_its_failure_is_contained(make_tray):

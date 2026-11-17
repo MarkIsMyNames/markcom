@@ -1,6 +1,5 @@
 import multiprocessing
 import os
-import sys
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -11,10 +10,8 @@ from pydantic import HttpUrl
 from PySide6.QtCore import QDeadlineTimer, QEventLoop, QObject, QPoint, QSize, QTimer, QUrl, Slot
 from PySide6.QtGui import QColor, QDesktopServices, QImage
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
-from markcom.config import CONFIG
-from markcom.tray import Tray, TrayAction
 from markcom.window import WebWindow, run_without_tray
 
 # No display is needed: Qt draws off screen. CI runners block Chromium's namespace sandbox, and
@@ -236,23 +233,6 @@ def test_open_brings_a_minimised_window_back(make_window):
     assert not shown().isMinimized()
 
 
-def test_open_and_close_from_another_thread_return_with_the_state_changed(make_window):
-    window = make_window()
-    records = []
-
-    def work():
-        window.open()
-        records.append(window.is_open())
-        window.close()
-        records.append(window.is_open())
-
-    thread = threading.Thread(target=work, daemon=True)
-    thread.start()
-    assert wait_until(lambda: not thread.is_alive())
-    thread.join()
-    assert records == [True, False]
-
-
 def test_a_same_origin_link_loads_in_the_window(make_window, browser):
     make_window().open()
     assert wait_until(lambda: view().title() == "Home")
@@ -306,30 +286,6 @@ def test_another_origin_in_an_iframe_loads_in_the_page(browser, site, other_site
         window.close()
 
 
-def open_without_an_application(icon):
-    """Child process body: no QApplication exists here, unlike in the test process."""
-    window = WebWindow("App", HttpUrl("http://127.0.0.1:1/"), icon)
-    try:
-        window.open()
-    except RuntimeError:
-        sys.exit(3)
-
-
-def test_methods_without_an_application_fail_fast(icon):
-    # A fresh interpreter: this process already has the module's QApplication.
-    child = multiprocessing.get_context("spawn").Process(
-        target=open_without_an_application, args=(icon,)
-    )
-    child.start()
-    try:
-        child.join(60)
-        assert child.exitcode == 3
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join()
-
-
 def run_a_window_without_a_tray(url, icon):
     """Child process body: only a child may run exec(), which ends WebEngine for its process."""
     window = WebWindow("Solo", HttpUrl(url), icon)
@@ -345,39 +301,6 @@ def test_running_without_a_tray_ends_when_the_window_closes(site, icon):
     child.start()
     try:
         child.join(60)
-        assert child.exitcode == 0
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join()
-
-
-def quit_while_an_action_calls_the_window(url, icon):
-    """Child process body: Quit ends exec() while a tray action still has a window call to make."""
-    window = WebWindow("Solo", HttpUrl(url), icon)
-    started = threading.Event()
-    go = threading.Event()
-
-    def slow_action():
-        started.set()
-        go.wait()
-        window.is_open()
-
-    with Tray("Solo", icon, None, window, [TrayAction("Slow", slow_action)]) as tray:
-        QApplication.instance().findChild(QSystemTrayIcon).contextMenu().actions()[0].trigger()
-        started.wait()
-        QTimer.singleShot(0, QApplication.quit)
-        tray.run()
-        go.set()
-
-
-def test_quitting_does_not_hang_on_a_window_call_made_after_exec_returns(site, icon):
-    child = multiprocessing.get_context("spawn").Process(
-        target=quit_while_an_action_calls_the_window, args=(f"{site}/index.html", icon)
-    )
-    child.start()
-    try:
-        child.join(CONFIG.window.gui_wait_sec + 60)
         assert child.exitcode == 0
     finally:
         if child.is_alive():

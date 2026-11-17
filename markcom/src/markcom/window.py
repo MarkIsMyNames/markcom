@@ -2,13 +2,11 @@
 QApplication is created: QtWebEngine must be loaded first."""
 
 import logging
-from collections.abc import Callable
-from concurrent.futures import Future
 from pathlib import Path
 from typing import Self, override
 
 from pydantic import HttpUrl
-from PySide6.QtCore import QCoreApplication, Qt, QThread, QTimer, QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWebEngineCore import (
     QWebEngineNavigationRequest,
@@ -22,30 +20,6 @@ from markcom.config import CONFIG
 from markcom.tray import TrayTarget
 
 logger: logging.Logger = logging.getLogger(__name__)
-
-
-def _on_gui_thread[T](work: Callable[[], T]) -> T:
-    """Run `work` on the main thread and return its result, or raise what it raised."""
-    app: QCoreApplication | None = QApplication.instance()
-    if app is None or not isinstance(app, QApplication):
-        # Qt aborts the whole process if a widget is built with no application.
-        no_app: str = "no QApplication: use a WebWindow under a Tray or run_without_tray"
-        raise RuntimeError(no_app)
-    if QThread.isMainThread():
-        return work()
-    result: Future[T] = Future()
-
-    def run() -> None:
-        try:
-            result.set_result(work())
-        except BaseException as error:
-            result.set_exception(error)
-            # The caller gets the error through the Future; re-raising also reports it on the
-            # GUI thread.
-            raise
-
-    QTimer.singleShot(0, app, run)
-    return result.result(timeout=CONFIG.window.gui_wait_sec)
 
 
 WEB_SCHEMES: frozenset[str] = frozenset({"http", "https"})
@@ -92,7 +66,8 @@ class _OwnOriginPage(QWebEnginePage):
 
 class WebWindow(TrayTarget):
     """A web page in its own window. The window is built on the first open() and then only
-    hidden, so the page keeps its state, size and position. Methods work from any thread."""
+    hidden, so the page keeps its state, size and position. Call it on the GUI thread, as Qt
+    requires."""
 
     def __init__(self, title: str, url: HttpUrl, icon: Path) -> None:
         self._title: str = title
@@ -104,30 +79,19 @@ class WebWindow(TrayTarget):
 
     @override
     def is_open(self) -> bool:
-        return _on_gui_thread(self._is_visible)
-
-    @override
-    def open(self) -> None:
-        _on_gui_thread(self._show)
-
-    @override
-    def close(self) -> None:
-        _on_gui_thread(self._hide)
-
-    def _is_visible(self) -> bool:
         return (
             self._holder is not None and self._holder.isVisible() and not self._holder.isMinimized()
         )
 
-    def _show(self) -> None:
+    @override
+    def open(self) -> None:
         if self._holder is None:
             self._holder = self._build()
         self._holder.setWindowState(self._holder.windowState() & ~Qt.WindowState.WindowMinimized)
         self._holder.show()
-        self._holder.raise_()
-        self._holder.activateWindow()
 
-    def _hide(self) -> None:
+    @override
+    def close(self) -> None:
         if self._holder is not None:
             self._holder.close()
 
