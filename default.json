@@ -74,6 +74,13 @@
         "lockFileMaintenance"
       ],
       "minimumReleaseAge": null
+    },
+    {
+      "description": "Overrides: raise the range in package.json, as a lockfile-only update installs the package by name and npm rejects it (EOVERRIDE)",
+      "matchDepTypes": [
+        "overrides"
+      ],
+      "rangeStrategy": "bump"
     }
   ],
   "description": "Shared Renovate preset for every MarkIsMyNames repository; each repo's renovate.json extends github>MarkIsMyNames/markcom"
