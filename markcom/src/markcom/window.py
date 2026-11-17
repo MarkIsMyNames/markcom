@@ -11,7 +11,11 @@ from typing import override
 from pydantic import HttpUrl
 from PySide6.QtCore import QCoreApplication, Qt, QThread, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWebEngineCore import QWebEngineNewWindowRequest, QWebEnginePage
+from PySide6.QtWebEngineCore import (
+    QWebEngineNavigationRequest,
+    QWebEngineNewWindowRequest,
+    QWebEnginePage,
+)
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
 
@@ -53,17 +57,14 @@ class _OwnOriginPage(QWebEnginePage):
     def __init__(self, origin: QUrl, parent: QWidget) -> None:
         super().__init__(parent)
         self._origin: QUrl = origin
+        self.navigationRequested.connect(self._on_navigation)
         self.newWindowRequested.connect(self._on_new_window)
 
-    @override
-    def acceptNavigationRequest(
-        self, url: QUrl | str, type_: QWebEnginePage.NavigationType, is_main_frame: bool
-    ) -> bool:
-        target: QUrl = QUrl(url)
-        if not is_main_frame or self._is_own_origin(target):
-            return True
-        self._send_away(target)
-        return False
+    def _on_navigation(self, request: QWebEngineNavigationRequest) -> None:
+        url: QUrl = request.url()
+        if request.isMainFrame() and not self._is_own_origin(url):
+            request.reject()
+            self._send_away(url)
 
     def _is_own_origin(self, url: QUrl) -> bool:
         return (
@@ -72,7 +73,8 @@ class _OwnOriginPage(QWebEnginePage):
             and url.port() == self._origin.port()
         )
 
-    def _send_away(self, url: QUrl) -> None:
+    @staticmethod
+    def _send_away(url: QUrl) -> None:
         # Scheme and host only: a URL can carry a token.
         if url.scheme() in WEB_SCHEMES:
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
