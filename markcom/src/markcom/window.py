@@ -71,7 +71,7 @@ class WebWindow(TrayTarget):
         self._url: HttpUrl = url
         self._icon: Path = icon
         # None until the first open(): a widget cannot exist before the QApplication, which
-        # Tray or run_without_tray creates after this object.
+        # Tray or Application creates after this object.
         self._holder: QMainWindow | None = None
 
     @override
@@ -111,9 +111,12 @@ class WebWindow(TrayTarget):
         return holder
 
 
-class _Application(QApplication):
-    """A QApplication that shuts down when its `with` block ends, as Qt allows only one at a
-    time."""
+class Application(QApplication):
+    """The Qt application for an app with no tray; run it with exec() on the main thread.
+
+    Its `with` block shuts it down, as Qt allows only one at a time. Closing the last window
+    quits it, as Qt does by default; Tray turns that off, so there a close only hides.
+    """
 
     def __init__(self, name: str) -> None:
         super().__init__([name])
@@ -123,12 +126,3 @@ class _Application(QApplication):
 
     def __exit__(self, *_: object) -> None:
         self.shutdown()
-
-
-def run_without_tray(name: str, window: WebWindow) -> None:
-    """Run `window` as an app with no tray, on the main thread: open it and block until it is
-    closed."""
-    # Qt's default stays on: with no tray, closing the last window must end the app.
-    with _Application(name) as app:
-        window.open()
-        app.exec()

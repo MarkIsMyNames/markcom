@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor, QDesktopServices, QImage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QWidget
 
-from markcom.window import WebWindow, run_without_tray
+from markcom.window import Application, WebWindow
 
 # No display is needed: Qt draws off screen. CI runners block Chromium's namespace sandbox, and
 # these tests load only pages they serve themselves.
@@ -299,12 +299,14 @@ def test_another_origin_in_an_iframe_loads_in_the_page(browser, site, other_site
 def run_a_window_without_a_tray(url, icon):
     """Child process body: only a child may run exec(), which ends WebEngine for its process."""
     window = WebWindow("Solo", HttpUrl(url), icon)
-    # A posted call waits for the event loop, so it runs once the window is open.
-    QTimer.singleShot(0, window.close)
-    run_without_tray("Solo", window)
+    with Application("Solo") as app:
+        window.open()
+        # A posted call waits for the event loop, so it runs once exec() has started.
+        QTimer.singleShot(0, window.close)
+        app.exec()
 
 
-def test_running_without_a_tray_ends_when_the_window_closes(site, icon):
+def test_without_a_tray_closing_the_window_quits_the_app(site, icon):
     child = multiprocessing.get_context("spawn").Process(
         target=run_a_window_without_a_tray, args=(f"{site}/index.html", icon)
     )
