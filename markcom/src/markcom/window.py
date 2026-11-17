@@ -14,7 +14,7 @@ from PySide6.QtWebEngineCore import (
     QWebEnginePage,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QApplication, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 
 from markcom.config import CONFIG
 from markcom.tray import TrayTarget
@@ -75,7 +75,7 @@ class WebWindow(TrayTarget):
         self._icon: Path = icon
         # None until the first open(): a widget cannot exist before the QApplication, which
         # Tray or run_without_tray creates after this object.
-        self._holder: QWidget | None = None
+        self._holder: QMainWindow | None = None
 
     @override
     def is_open(self) -> bool:
@@ -99,14 +99,12 @@ class WebWindow(TrayTarget):
         if self._holder is not None:
             self._holder.close()
 
-    def _build(self) -> QWidget:
-        # The view sits in a holder: closing a view itself ends its page, closing the holder
-        # only hides it.
-        holder: QWidget = QWidget()
-        layout: QVBoxLayout = QVBoxLayout(holder)
-        layout.setContentsMargins(0, 0, 0, 0)
-        view: QWebEngineView = QWebEngineView(holder)
-        layout.addWidget(view)
+    def _build(self) -> QMainWindow:
+        # The view sits in a holder window: closing a view itself ends its page, closing the
+        # holder only hides it.
+        holder: QMainWindow = QMainWindow()
+        view: QWebEngineView = QWebEngineView()
+        holder.setCentralWidget(view)
         start: QUrl = QUrl(str(self._url))
         view.setPage(_OwnOriginPage(start, holder))
         view.load(start)
