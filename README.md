@@ -4,7 +4,7 @@ Shared libraries for my Python and TypeScript projects.
 
 | Folder | Package | For |
 |---|---|---|
-| `markcom/` | `markcom` (Python, installed from git) | typed `config.json`, secrets from `.env`, logging and the `run()` entry point; with the `desktop` extra, notifications; with the `window` extra, a tray icon and a web frontend in its own window (`markcom.tray`, `markcom.window`) |
+| `markcom/` | `markcom` (Python, installed from git) | typed `config.json`, secrets from `.env`, logging and the `run()` entry point; with the `desktop` extra, notifications; with the `window` extra, a tray icon and a web frontend in its own window (`markcom.tray`, `markcom.window`); with the `web` extra, a loopback Host/Origin guard (`markcom.own_origin`); with the `nicegui` extra, a NiceGUI UI served on its own thread (`markcom.ui_server`, `markcom.page_refresh`) |
 | `markcom-i18n/` | `@markcom/i18n` (npm) | locale lookup, browser-language detection, i18next set-up, the `index.html` locale plugin, `/<lang>/` routing, and build-time checks of every locale file; its `e2e/` tests the routing on a small test site |
 | `markcom-web-config/` | `@markcom/web-config` (npm) | shared ESLint, Prettier, TypeScript and Vitest coverage settings |
 
@@ -21,6 +21,10 @@ markcom = { git = "https://github.com/MarkIsMyNames/markcom", subdirectory = "ma
 ```
 
 The `desktop` extra (`markcom[desktop]`) sends notifications and needs no Qt. The `window` extra (`markcom[window]`) adds the tray icon and `markcom.window`, which shows a web frontend in its own window with QtWebEngine; it downloads Qt and WebEngine, about 260 MB on Linux (pyside6-webengine, pyside6-addons and pyside6-essentials). The window keeps no cookies or site storage between runs, and it does not download files.
+
+A tray built with `TrayNotifications` also sends every logger's ERROR records as notifications, shown for its `error_display_sec`, and CRITICAL ones until dismissed, while it is entered. Each counts on the tray's badge. An app logs a failure and markcom notifies; it needs no notifier code of its own.
+
+The `web` extra (`markcom[web]`, Starlette only) adds `OwnOriginOnly`, ASGI middleware for a server bound to loopback: it refuses any request or websocket whose Host, or Origin if it has one, is not the server's own address, which stops DNS rebinding and cross-origin websockets from pages in the browser. The `nicegui` extra (`markcom[nicegui]`) adds `UiServer`, which serves a NiceGUI UI behind that guard on its own thread so the tray and window keep the main thread, and `keep_current`, which redraws a page's body only when what it shows has changed.
 
 TypeScript, from npm:
 
