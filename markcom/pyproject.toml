@@ -1,7 +1,7 @@
 [project]
 name = "markcom"
-version = "0.3.0"
-description = "Shared code for Python projects: typed config, .env secrets, logging and the entry-point runner; with the desktop extra, notifications and a tray icon; with the window extra, a web frontend in its own window."
+version = "0.4.0"
+description = "Shared code for Python projects: typed config, .env secrets, logging and the entry-point runner; with the desktop extra, notifications; with the window extra, a tray icon and a web frontend in its own window; with the web extra, a loopback Host/Origin guard; with the nicegui extra, a NiceGUI UI served on its own thread."
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.14",
@@ -22,14 +22,27 @@ window = [
     "markcom[desktop]",
     "pyside6-webengine>=6.12",
 ]
+# Loopback Host/Origin guard for any ASGI app (markcom.own_origin); no NiceGUI.
+web = [
+    "starlette>=1.3",
+]
+# A NiceGUI UI on its own thread, behind the guard (markcom.ui_server, markcom.page_refresh).
+nicegui = [
+    "markcom[web]",
+    "nicegui>=4.0",
+    "uvicorn>=0.54",
+    "wsproto>=1.3",
+]
 
 [dependency-groups]
 dev = [
-    "markcom[window]",
+    "markcom[window,nicegui]",
     "bandit>=1.9",
+    "httpx>=0.28",
     "mypy>=2.4",
     "pip-audit>=2.10",
     "pytest>=9.0",
+    "pytest-asyncio>=1.5",
     "pytest-cov>=7.0",
     "ruff>=0.17",
     "dbus-fast>=5.2.0",
@@ -48,6 +61,8 @@ exclude = ["**/*_test.py"]
 testpaths = ["src"]
 python_files = ["*_test.py"]
 addopts = "--strict-markers --strict-config --cov=markcom --cov-report=term-missing --cov-fail-under=85"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     "error",
     # desktop-notifier 6.2.0 (the latest) calls an asyncio API Python 3.14 deprecates; not our code.
@@ -68,6 +83,9 @@ ignore = [
     "D",      # house rule: comments only where needed, so no docstring on every item
     "COM812", # conflicts with the formatter (ruff docs)
     "CPY001", # no copyright header in each file
+    "TC001",  # house rule: imports only at the top, never under `if TYPE_CHECKING:`
+    "TC002",  # house rule: imports only at the top, never under `if TYPE_CHECKING:`
+    "TC003",  # house rule: imports only at the top, never under `if TYPE_CHECKING:`
 ]
 
 [tool.ruff.lint.per-file-ignores]
