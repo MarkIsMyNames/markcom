@@ -210,19 +210,36 @@ def test_error_and_critical_records_are_sent(make_tray, level, urgency, display_
     ]
 
 
-def refuse():
-    refused = "connection refused"
-    raise OSError(refused)
+def fail_with(error):
+    raise error
 
 
-def test_a_record_with_an_exception_shows_its_text_but_not_the_traceback(make_tray):
+@pytest.mark.parametrize(
+    ("error", "body"),
+    [
+        pytest.param(
+            OSError("connection refused"),
+            "cannot read feed: OSError: connection refused",
+            id="message",
+        ),
+        pytest.param(TimeoutError(), "cannot read feed: TimeoutError", id="no-message"),
+        pytest.param(
+            ExceptionGroup("2 reads failed", [OSError("refused"), TimeoutError("slow")]),
+            "cannot read feed: ExceptionGroup: 2 reads failed (2 sub-exceptions)\n"
+            "   OSError: refused\n"
+            "   TimeoutError: slow",
+            id="group",
+        ),
+    ],
+)
+def test_a_record_with_an_exception_shows_it_but_not_the_traceback(make_tray, error, body):
     sent = SentNotifications()
     make_tray(notifier=sent)
     try:
-        refuse()
-    except OSError:
+        fail_with(error)
+    except (OSError, ExceptionGroup):
         app_log.exception("cannot read %s", "feed")
-    assert [message for _, message, _, _ in sent] == ["cannot read feed: connection refused"]
+    assert [message for _, message, _, _ in sent] == [body]
 
 
 @pytest.mark.parametrize("level", [logging.DEBUG, logging.INFO, logging.WARNING])

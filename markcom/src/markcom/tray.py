@@ -10,6 +10,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from traceback import format_exception_only
 from typing import Self, override
 
 from desktop_notifier import Urgency
@@ -66,7 +67,8 @@ type Send = Callable[[str, str, Urgency, int], None]
 
 class _RecordNotifications(logging.Handler):
     """ERROR records shown for error_display_sec, CRITICAL ones until dismissed. The title is the
-    level; the body is the message, then the exception's own text if the record has one."""
+    level; the body is the message, then the record's exception (type and text, and each one in a
+    group) without its traceback."""
 
     def __init__(self, send: Send, error_display_sec: int) -> None:
         super().__init__(logging.ERROR)
@@ -77,9 +79,11 @@ class _RecordNotifications(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         title: str = record.levelname.capitalize()
         body: str = record.getMessage()
-        if record.exc_info is not None and record.exc_info[1] is not None:
+        # None: no exception, or exc_info=True outside an except block
+        error: BaseException | None = None if record.exc_info is None else record.exc_info[1]
+        if error is not None:
             # the traceback is for the log; a notification says only why
-            body = f"{body}: {record.exc_info[1]}"
+            body = f"{body}: {''.join(format_exception_only(error, show_group=True)).strip()}"
         if record.levelno >= logging.CRITICAL:
             self._send(title, body, Urgency.Critical, NEVER_EXPIRES_SEC)
             return
