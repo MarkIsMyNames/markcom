@@ -75,3 +75,4 @@ playwright/.cache/
 
 # ===== Project-specific temp and generated files =====
 # None: builds, coverage and Playwright output are covered by the sections above.
+docs

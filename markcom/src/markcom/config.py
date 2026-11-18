@@ -82,11 +82,19 @@ class TrayConfig(StrictModel):
     badge_text_colour: HexColour
 
 
+class WindowConfig(StrictModel):
+    """Web window's opening size; after that Qt keeps the user's."""
+
+    width: Pixels
+    height: Pixels
+
+
 class MarkcomConfig(StrictModel):
     log_format: LogFormat
     # Names the app a written .desktop file belongs to, so no other file is ever taken over.
     desktop_entry_owner_key: str
     tray: TrayConfig
+    window: WindowConfig
 
 
 CONFIG: MarkcomConfig = load_config(CONFIG_PATH, MarkcomConfig)

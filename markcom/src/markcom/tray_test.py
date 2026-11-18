@@ -1,6 +1,7 @@
 import os
 import threading
 from contextlib import ExitStack
+from typing import override
 
 import pytest
 from desktop_notifier import Urgency
@@ -29,44 +30,45 @@ def noop():
 
 
 class FakeWindow(TrayTarget):
-    """Records each open and close; `release` holds them back so a test can click meanwhile."""
+    """Records each open/close and whether it ran on the GUI thread."""
 
     def __init__(self, *, is_open=False):
         self.opened = is_open
         self.calls = []
-        self.release = threading.Event()
-        self.release.set()
-        self.done = threading.Semaphore(0)
+        self.on_main_thread = []
 
+    @override
     def is_open(self):
         return self.opened
 
+    @override
     def open(self):
-        self.release.wait(WAIT_SEC)
-        self.opened = True
-        self.calls.append("open")
-        self.done.release()
+        self._record("open", opened=True)
 
+    @override
     def close(self):
-        self.release.wait(WAIT_SEC)
-        self.opened = False
-        self.calls.append("close")
-        self.done.release()
+        self._record("close", opened=False)
+
+    def _record(self, call, *, opened):
+        self.opened = opened
+        self.calls.append(call)
+        self.on_main_thread.append(threading.current_thread() is threading.main_thread())
 
 
 @pytest.fixture
 def make_tray(tmp_path):
-    """Builds a tray, entered for the test and left after it; each test gets its own, which
-    also shows that leaving a tray releases Qt's one application."""
+    """Builds a tray on its own QApplication; both end with the test, as Qt allows one at a
+    time."""
     icon = tmp_path / "icon.png"
-    # A QImage, as a QPixmap needs the application the tray makes.
     image = QImage(64, 64, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
     image.save(str(icon))
     with ExitStack() as stack:
+        app = QApplication(["App"])
+        stack.callback(app.shutdown)
 
         def make(notifier=None, target=None, actions=()):
-            return stack.enter_context(Tray("App", icon, notifier, target or FakeWindow(), actions))
+            return stack.enter_context(Tray(app, icon, notifier, target or FakeWindow(), actions))
 
         yield make
 
@@ -94,37 +96,29 @@ def test_left_click_opens_then_the_next_closes(make_tray):
     window = FakeWindow()
     make_tray(target=window)
     left_click()
-    assert window.done.acquire(timeout=WAIT_SEC)
     left_click()
-    assert window.done.acquire(timeout=WAIT_SEC)
     assert window.calls == ["open", "close"]
+
+
+def test_left_click_runs_the_target_on_the_gui_thread(make_tray):
+    window = FakeWindow()
+    make_tray(target=window)
+    left_click()
+    assert window.on_main_thread == [True]
 
 
 def test_left_click_closes_a_target_opened_outside_the_tray(make_tray):
     window = FakeWindow(is_open=True)
     make_tray(target=window)
     left_click()
-    assert window.done.acquire(timeout=WAIT_SEC)
     assert window.calls == ["close"]
-
-
-def test_clicks_while_opening_are_dropped(make_tray):
-    window = FakeWindow()
-    window.release.clear()
-    make_tray(target=window)
-    for _ in range(5):
-        left_click()
-    window.release.set()
-    assert window.done.acquire(timeout=WAIT_SEC)
-    assert not window.done.acquire(timeout=0.2)
-    assert window.calls == ["open"]
 
 
 def test_right_click_does_not_open(make_tray):
     window = FakeWindow()
     make_tray(target=window)
     icon().activated.emit(QSystemTrayIcon.ActivationReason.Context)
-    assert not window.done.acquire(timeout=0.2)
+    assert window.calls == []
 
 
 def test_menu_click_returns_before_a_slow_action_and_its_failure_is_contained(make_tray):
@@ -172,7 +166,23 @@ def test_a_tray_without_a_notifier_refuses_to_send(make_tray):
         tray.send("t", "m", Urgency.Critical, 0)
 
 
-def test_quit_ends_run(make_tray):
-    tray = make_tray()
+def test_quit_ends_exec(make_tray):
+    make_tray()
     QTimer.singleShot(0, icon().contextMenu().actions()[-1].trigger)
-    tray.run()
+    QApplication.instance().exec()
+
+
+def test_the_icon_shows_until_the_tray_is_left(tmp_path):
+    icon_path = tmp_path / "icon.png"
+    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    with ExitStack() as stack:
+        app = QApplication(["App"])
+        stack.callback(app.shutdown)
+        with Tray(app, icon_path, None, FakeWindow(), ()):
+            assert icon().isVisible()
+        assert not icon().isVisible()
+
+
+def test_the_tray_does_not_quit_when_its_last_window_closes(make_tray):
+    make_tray()
+    assert not QApplication.instance().quitOnLastWindowClosed()

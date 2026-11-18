@@ -8,5 +8,9 @@
     "badge_margin": 3,
     "badge_colour": "#d32f2f",
     "badge_text_colour": "#ffffff"
+  },
+  "window": {
+    "width": 1280,
+    "height": 800
   }
 }
