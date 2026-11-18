@@ -299,3 +299,16 @@ def test_a_failed_action_is_sent_as_one_notification(make_tray, error):
     icon().contextMenu().actions()[0].trigger()
     assert sent.arrived.wait(WAIT_SEC)
     assert [urgency for _, _, urgency, _ in sent] == [Urgency.Normal]
+
+
+class FailingNotifications:
+    """DesktopNotifier stand-in with a bug: every send raises."""
+
+    def send(self, *_):
+        bug = "backend bug"
+        raise TypeError(bug)
+
+
+def test_a_failing_notifier_does_not_break_the_apps_logging(make_tray):
+    make_tray(notifier=FailingNotifications())
+    app_log.error("down")

@@ -27,6 +27,9 @@ logger: logging.Logger = logging.getLogger(__name__)
 # RuntimeError). They are logged so the tray keeps running; anything else is a bug, logged with
 # its stack by _log_bug.
 ACTION_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, RuntimeError)
+# What turning a log record into a notification may fail with: a malformed log call (TypeError,
+# ValueError, KeyError) or a Qt object already deleted (RuntimeError).
+NOTIFY_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, KeyError, RuntimeError)
 # Where the badge is drawn, badge_margin pixels in from the icon's bottom-right corner.
 BADGE_RECT: QRectF = QRectF(
     CONFIG.tray.icon_size - CONFIG.tray.badge_size - CONFIG.tray.badge_margin,
@@ -71,6 +74,14 @@ class _RecordNotifications(logging.Handler):
 
     @override
     def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self._notify(record)
+        except NOTIFY_ERRORS:
+            # logging's contract: a handler never raises into the app's log call;
+            # handleError reports the failure on stderr instead
+            self.handleError(record)
+
+    def _notify(self, record: logging.LogRecord) -> None:
         title: str = record.levelname.capitalize()
         body: str = record.getMessage()
         # None: no exception, or exc_info=True outside an except block
