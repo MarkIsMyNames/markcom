@@ -12,5 +12,12 @@
   "window": {
     "width": 1280,
     "height": 800
+  },
+  "ui_server": {
+    "shutdown_grace_sec": 1,
+    "viewport": "width=device-width, initial-scale=1",
+    "binding_refresh_sec": 0.5,
+    "reconnect_timeout_sec": 3.0,
+    "message_history": 1000
   }
 }

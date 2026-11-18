@@ -6,6 +6,7 @@ and runs uvicorn on a thread. uvicorn only installs signal handlers on the main 
 one it leaves them alone.
 """
 
+import logging
 import threading
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -15,33 +16,32 @@ from typing import Self, override
 
 import uvicorn
 from nicegui import core
+from pydantic import HttpUrl
 
-from markcom.own_origin import OwnOriginOnly
+from markcom.config import CONFIG
+from markcom.own_origin import OwnOriginOnly, local_url
 
-# Seconds open connections (the window's websocket) get to close on leaving.
-SHUTDOWN_GRACE_SEC: int = 1
-LOG_LEVEL: str = "warning"
+logger: logging.Logger = logging.getLogger(__name__)
+
+# its INFO lines carry request paths and queries, NiceGUI's client_id (a session ID) among them
+UVICORN_LOG_LEVEL: int = logging.WARNING
 # The websocket implementation NiceGUI runs on.
 WEBSOCKETS: str = "wsproto"
-VIEWPORT: str = "width=device-width, initial-scale=1"
-# Seconds between NiceGUI's checks of bound values.
-BINDING_REFRESH_SEC: float = 0.5
-RECONNECT_TIMEOUT_SEC: float = 3.0
-MESSAGE_HISTORY: int = 1000
 
 
 def configure(root: Callable[[], None], title: str) -> None:
     """Make `root` build every page, with the settings ui.run would give it."""
+    logger.debug("NiceGUI configured for %r", title)
     core.app.config.add_run_config(
         reload=False,
         title=title,
-        viewport=VIEWPORT,
+        viewport=CONFIG.ui_server.viewport,
         favicon=None,
         dark=None,
         language=None,
-        binding_refresh_interval=BINDING_REFRESH_SEC,
-        reconnect_timeout=RECONNECT_TIMEOUT_SEC,
-        message_history_length=MESSAGE_HISTORY,
+        binding_refresh_interval=CONFIG.ui_server.binding_refresh_sec,
+        reconnect_timeout=CONFIG.ui_server.reconnect_timeout_sec,
+        message_history_length=CONFIG.ui_server.message_history,
         tailwind=True,
         unocss=None,
         prod_js=True,
@@ -61,17 +61,20 @@ class UiServer(AbstractContextManager["UiServer"]):
 
     def __init__(self, root: Callable[[], None], title: str, host: IPv4Address, port: int) -> None:
         configure(root, title)
+        self._title: str = title
+        self._url: HttpUrl = local_url(host, port)
         settings: uvicorn.Config = uvicorn.Config(
             OwnOriginOnly(core.app, host, port),
             host=str(host),
             port=port,
             # Leave the app's logging set up as it is.
             log_config=None,
-            log_level=LOG_LEVEL,
+            log_level=UVICORN_LOG_LEVEL,
             ws=WEBSOCKETS,
-            timeout_graceful_shutdown=SHUTDOWN_GRACE_SEC,
+            timeout_graceful_shutdown=CONFIG.ui_server.shutdown_grace_sec,
         )
         self._socket: socket = settings.bind_socket()
+        logger.debug("bound %s", self._socket.getsockname())
         self._server: uvicorn.Server = uvicorn.Server(settings)
         self._thread: threading.Thread = threading.Thread(
             target=self._server.run, kwargs={"sockets": [self._socket]}, name="ui"
@@ -80,10 +83,13 @@ class UiServer(AbstractContextManager["UiServer"]):
     @override
     def __enter__(self) -> Self:
         self._thread.start()
+        logger.info("serving %r at %s", self._title, self._url)
         return self
 
     @override
     def __exit__(self, *_: object) -> None:
+        logger.info("stopping %r", self._title)
         self._server.should_exit = True
         self._thread.join()
         self._socket.close()
+        logger.info("stopped %r", self._title)
