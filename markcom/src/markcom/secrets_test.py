@@ -12,8 +12,8 @@ class ExampleSecrets(BaseSecrets):
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    """Runs in an empty folder with a clean environment, then sets the given variables and .env."""
-    monkeypatch.chdir(tmp_path)
+    """Clears the environment, then sets the given variables and writes .env into the folder it
+    returns."""
     monkeypatch.delenv("API_TOKEN", raising=False)
     monkeypatch.delenv("PORT", raising=False)
 
@@ -22,6 +22,7 @@ def setup(tmp_path, monkeypatch):
             monkeypatch.setenv(name, value)
         if dotenv is not None:
             (tmp_path / ".env").write_text(dotenv, encoding="utf-8")
+        return tmp_path
 
     return apply
 
@@ -35,8 +36,7 @@ def setup(tmp_path, monkeypatch):
     ],
 )
 def test_reads_secrets(setup, environ, dotenv, token):
-    setup(environ, dotenv)
-    secrets = load_secrets(ExampleSecrets)
+    secrets = load_secrets(ExampleSecrets, setup(environ, dotenv))
     assert secrets.api_token.get_secret_value() == token
     assert secrets.port == 8080
 
@@ -50,12 +50,11 @@ def test_reads_secrets(setup, environ, dotenv, token):
     ],
 )
 def test_rejects_bad_secrets(setup, model, environ, dotenv, match):
-    setup(environ, dotenv)
+    folder = setup(environ, dotenv)
     with pytest.raises(ConfigError, match=match):
-        load_secrets(model)
+        load_secrets(model, folder)
 
 
 @pytest.mark.parametrize("dotenv", [None, "SOMEONE_ELSES=x\n"])
 def test_no_secrets_needs_no_variables_and_ignores_dotenv(setup, dotenv):
-    setup({}, dotenv)
-    assert load_secrets(NoSecrets) == NoSecrets()
+    assert load_secrets(NoSecrets, setup({}, dotenv)) == NoSecrets()
