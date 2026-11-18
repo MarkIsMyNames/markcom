@@ -1,10 +1,13 @@
+import asyncio
+from contextlib import closing
+
 import httpx
 import pytest
-from nicegui import core, ui
+from nicegui import Event, core, ui
 from nicegui.testing import general
 from nicegui.testing.user import User
 
-from markcom.page_refresh import keep_current
+from markcom.page_refresh import announce, keep_current
 from markcom.ui_server import configure
 
 
@@ -14,6 +17,7 @@ class Page:
     def __init__(self):
         self.value = 1
         self.drawn = []
+        self.changed = Event()
         self.redraws = []
 
     def build(self):
@@ -22,7 +26,7 @@ class Page:
             self.drawn.append(value)
             ui.label(f"value {value}")
 
-        self.redraws.append(keep_current(lambda: self.value, body))
+        self.redraws.append(keep_current(lambda: self.value, body, self.changed))
 
 
 @pytest.fixture
@@ -53,15 +57,41 @@ async def test_draws_the_current_value_when_the_page_opens(user):
     await user.should_see("value 1")
 
 
-async def test_redraws_when_the_value_changed(user, page):
+async def test_a_change_announced_from_another_thread_redraws_the_page(user, page):
     await user.open("/")
     page.value = 2
-    await page.redraws[0]()
+    await asyncio.to_thread(announce, page.changed)
     await user.should_see("value 2")
     await user.should_not_see("value 1")
 
 
-async def test_does_not_redraw_when_nothing_changed(user, page):
+async def test_an_announcement_with_nothing_changed_does_not_redraw(user, page):
     await user.open("/")
-    await page.redraws[0]()
+    await page.changed.call()
     assert page.drawn == [1]
+
+
+async def test_the_returned_function_redraws_after_the_pages_own_action(user, page):
+    await user.open("/")
+    page.value = 2
+    await page.redraws[0]()
+    await user.should_see("value 2")
+
+
+def heard_after_announcing():
+    heard = []
+    changed = Event()
+    changed.subscribe(lambda: heard.append(True))
+    announce(changed)
+    return heard
+
+
+def test_an_announcement_before_nicegui_starts_reaches_no_one(monkeypatch):
+    monkeypatch.setattr(core, "loop", None)
+    assert heard_after_announcing() == []
+
+
+def test_an_announcement_after_nicegui_stops_reaches_no_one(monkeypatch):
+    with closing(asyncio.new_event_loop()) as stopped:
+        monkeypatch.setattr(core, "loop", stopped)
+        assert heard_after_announcing() == []
