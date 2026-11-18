@@ -25,6 +25,12 @@ MS_PER_SEC: int = 1000
 ENTRY_SECTION: str = "Desktop Entry"
 APPLICATIONS: str = "applications"
 DESKTOP_SUFFIX: str = ".desktop"
+# A malformed or non-UTF-8 existing .desktop file is left as it is: it may be another app's.
+DESKTOP_FILE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    configparser.Error,
+    UnicodeDecodeError,
+)
 
 
 # The spec's urgency bytes, named like desktop_notifier's Urgency so one maps to the other by name.
@@ -160,9 +166,9 @@ def install_desktop_entry(app_name: str, icon: Path, data_home: Path) -> str:
         with path.open("w", encoding="utf-8") as file:
             entry.write(file, space_around_delimiters=False)
         logger.info("wrote %s", path)
-    except OSError:
+    except DESKTOP_FILE_ERRORS:
         # Notifications still show; Plasma only leaves them out of its history.
-        logger.warning("could not write %s for notification history", path, exc_info=True)
+        logger.warning("could not read or write %s for notification history", path, exc_info=True)
     return desktop_entry
 
 

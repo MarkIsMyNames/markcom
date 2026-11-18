@@ -114,6 +114,19 @@ def test_unwritable_data_folder_still_gives_an_entry(tmp_path):
     assert install_desktop_entry("App", Path("app.png"), blocker)
 
 
+@pytest.mark.parametrize(
+    "content",
+    [b"not an ini file\n", b"[Desktop Entry]\nName=\xff\n"],
+    ids=["malformed", "not-utf-8"],
+)
+def test_unreadable_desktop_file_still_gives_an_entry(tmp_path, content):
+    path = tmp_path / "applications" / "app.desktop"
+    path.parent.mkdir()
+    path.write_bytes(content)
+    assert install_desktop_entry("App", Path("app.png"), tmp_path) == "app"
+    assert path.read_bytes() == content
+
+
 @pytest.fixture
 def linux(monkeypatch, tmp_path):
     monkeypatch.setattr(platform, "system", lambda: "Linux")
