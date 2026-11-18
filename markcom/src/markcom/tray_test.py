@@ -274,3 +274,28 @@ def test_records_are_not_sent_once_the_tray_is_left(tmp_path):
             pass
         app_log.error("after")
     assert sent == []
+
+
+class ArrivingNotifications(SentNotifications):
+    """Also signals each arrival, for notifications sent from the tray's worker."""
+
+    def __init__(self):
+        super().__init__()
+        self.arrived = threading.Event()
+
+    def send(self, title, message, urgency, display_sec):
+        super().send(title, message, urgency, display_sec)
+        self.arrived.set()
+
+
+@pytest.mark.parametrize("error", [KeyError("feed"), OSError("xdg-open missing")])
+def test_a_failed_action_is_sent_as_one_notification(make_tray, error):
+    sent = ArrivingNotifications()
+
+    def broken():
+        raise error
+
+    make_tray(notifier=sent, actions=[TrayAction("Open", broken)])
+    icon().contextMenu().actions()[0].trigger()
+    assert sent.arrived.wait(WAIT_SEC)
+    assert [urgency for _, _, urgency, _ in sent] == [Urgency.Normal]

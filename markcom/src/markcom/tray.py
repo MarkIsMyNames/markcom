@@ -5,7 +5,7 @@ them, count as unread, shown as a badge on the icon, until the next left click."
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
@@ -24,7 +24,8 @@ from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
 logger: logging.Logger = logging.getLogger(__name__)
 
 # What a menu action may fail with (files: OSError, ValueError; browser: OSError; desktop:
-# RuntimeError). They are logged so the tray keeps running; anything else is a bug and raises.
+# RuntimeError). They are logged so the tray keeps running; anything else is a bug, logged with
+# its stack by _log_bug.
 ACTION_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, RuntimeError)
 # Where the badge is drawn, badge_margin pixels in from the icon's bottom-right corner.
 BADGE_RECT: QRectF = QRectF(
@@ -52,13 +53,6 @@ class TrayTarget(ABC):
     @abstractmethod
     def close(self) -> None:
         """Returns once is_open() reports False, so the next click opens it."""
-
-
-def _run_logged(run: Callable[[], None]) -> None:
-    try:
-        run()
-    except ACTION_ERRORS:
-        logger.exception("tray action failed")
 
 
 # Where a log record's notification goes: Tray.send.
@@ -107,6 +101,23 @@ class TrayAction:
     run: Callable[[], None]
 
 
+def _run_logged(action: TrayAction) -> None:
+    logger.info("tray action %r started", action.label)
+    try:
+        action.run()
+    except ACTION_ERRORS:
+        logger.exception("tray action %r failed", action.label)
+        return
+    logger.info("tray action %r finished", action.label)
+
+
+def _log_bug(label: str, done: Future[None]) -> None:
+    # None: the action returned, or failed with one of ACTION_ERRORS, already logged
+    error: BaseException | None = done.exception()
+    if error is not None:
+        logger.error("bug in tray action %r", label, exc_info=error)
+
+
 class Tray(AbstractContextManager["Tray"]):
     """Tray icon, shown until the tray is left; build it on the main thread, then run
     app.exec().
@@ -127,6 +138,7 @@ class Tray(AbstractContextManager["Tray"]):
         open. A right click shows `actions`, then Quit. `app` is the app's QApplication; its name
         is the tooltip. `notifications` is None for an app that sends none; otherwise, while the
         tray is entered, every logger's ERROR records are sent as notifications too."""
+        logger.debug("tray for %r with %d actions", app.applicationName(), len(actions))
         self._app: QApplication = app
         # A tray app's windows come and go; only Quit ends it.
         self._app.setQuitOnLastWindowClosed(False)
@@ -155,14 +167,16 @@ class Tray(AbstractContextManager["Tray"]):
         self._icon.setToolTip(app.applicationName())
         menu: QMenu = QMenu()
         for action in actions:
-            menu.addAction(action.label, partial(self._submit, action.run))
+            menu.addAction(action.label, partial(self._submit, action))
         menu.addSeparator()
         menu.addAction("Quit", self._app.quit)
 
         def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
-            if reason is QSystemTrayIcon.ActivationReason.Trigger:
-                self._show_unread(0)
-                self._open_or_close()
+            if reason is not QSystemTrayIcon.ActivationReason.Trigger:
+                logger.debug("tray activation %s ignored", reason.name)
+                return
+            self._show_unread(0)
+            self._open_or_close()
 
         self._icon.setContextMenu(menu)
         self._icon.activated.connect(clicked)
@@ -176,13 +190,16 @@ class Tray(AbstractContextManager["Tray"]):
             logger.debug("tray click: opening the target")
             self._target.open()
 
-    def _submit(self, run: Callable[[], None]) -> None:
-        self._worker.submit(_run_logged, run)
+    def _submit(self, action: TrayAction) -> None:
+        logger.debug("tray action %r queued", action.label)
+        self._worker.submit(_run_logged, action).add_done_callback(partial(_log_bug, action.label))
 
     @override
     def __enter__(self) -> Self:
         if self._records is not None:
             logging.getLogger().addHandler(self._records)
+            logger.debug("ERROR records go to notifications")
+        logger.info("tray icon shown")
         return self
 
     @override
@@ -192,6 +209,7 @@ class Tray(AbstractContextManager["Tray"]):
         # the app may outlive the tray; a left-over icon would call a stopped worker
         self._icon.hide()
         self._worker.shutdown()
+        logger.info("tray icon hidden")
 
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         """Send a notification, as DesktopNotifier.send does, and count it as unread; from any
@@ -203,6 +221,7 @@ class Tray(AbstractContextManager["Tray"]):
         QTimer.singleShot(0, self._app, lambda: self._show_unread(self._unread + 1))
 
     def _show_unread(self, count: int) -> None:
+        logger.debug("unread notifications: %d", count)
         self._unread = count
         self._icon.setIcon(QIcon(self._badged(count)))
 
