@@ -18,11 +18,9 @@ from PySide6.QtWidgets import QMainWindow, QWidget
 
 from markcom.config import CONFIG
 from markcom.tray import TrayTarget
+from markcom.web_scheme import WebScheme
 
 logger: logging.Logger = logging.getLogger(__name__)
-
-
-WEB_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 
 
 class _OwnOriginPage(QWebEnginePage):
@@ -50,7 +48,7 @@ class _OwnOriginPage(QWebEnginePage):
     @staticmethod
     def _send_away(url: QUrl) -> None:
         # scheme and host only: URL may carry a token
-        if url.scheme() in WEB_SCHEMES:
+        if url.scheme() in WebScheme:
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
             QDesktopServices.openUrl(url)
         else:

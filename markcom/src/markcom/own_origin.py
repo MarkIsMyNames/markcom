@@ -6,8 +6,11 @@ the server's websocket from another origin. Refusing a foreign Host, or Origin i
 every request, page and websocket alike, stops both.
 """
 
+import logging
+from enum import StrEnum
 from http import HTTPStatus
 from ipaddress import IPv4Address
+from socket import INADDR_LOOPBACK
 
 from pydantic import HttpUrl
 from starlette.datastructures import Headers
@@ -16,12 +19,24 @@ from starlette.status import WS_1008_POLICY_VIOLATION
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocketClose
 
-LOOPBACK: IPv4Address = IPv4Address("127.0.0.1")
+from markcom.web_scheme import WebScheme
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+LOOPBACK: IPv4Address = IPv4Address(INADDR_LOOPBACK)
 # What browsers also call LOOPBACK.
 LOOPBACK_NAME: str = "localhost"
 # Loopback only, so no TLS.
-SCHEME: str = "http"
-FORBIDDEN: str = "Forbidden"
+SCHEME: WebScheme = WebScheme.HTTP
+HOST_HEADER: str = "host"
+ORIGIN_HEADER: str = "origin"
+
+
+class ScopeType(StrEnum):
+    """The ASGI scope types the guard checks; any other (lifespan) passes straight through."""
+
+    HTTP = "http"
+    WEBSOCKET = "websocket"
 
 
 def local_url(host: IPv4Address, port: int) -> HttpUrl:
@@ -37,16 +52,34 @@ class OwnOriginOnly:
         self._app: ASGIApp = app
         self._hosts: frozenset[str] = frozenset(f"{name}:{port}" for name in names)
         self._origins: frozenset[str] = frozenset(f"{SCHEME}://{h}" for h in self._hosts)
+        logger.debug("accepting Host %s", sorted(self._hosts))
 
     def _allowed(self, scope: Scope) -> bool:
         headers: Headers = Headers(scope=scope)
-        origin: str | None = headers.get("origin")
-        return headers.get("host") in self._hosts and (origin is None or origin in self._origins)
+        origin: str | None = headers.get(ORIGIN_HEADER)
+        return headers.get(HOST_HEADER) in self._hosts and (
+            origin is None or origin in self._origins
+        )
+
+    @staticmethod
+    def _log_refusal(scope: Scope) -> None:
+        headers: Headers = Headers(scope=scope)
+        # %r: header values are untrusted, and repr keeps a CR or LF from forging a log line
+        logger.warning(
+            "refused %s from Host %r, Origin %r",
+            scope["type"],
+            headers.get(HOST_HEADER),
+            headers.get(ORIGIN_HEADER),
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and not self._allowed(scope):
-            await PlainTextResponse(FORBIDDEN, HTTPStatus.FORBIDDEN)(scope, receive, send)
-        elif scope["type"] == "websocket" and not self._allowed(scope):
+        if scope["type"] == ScopeType.HTTP and not self._allowed(scope):
+            self._log_refusal(scope)
+            await PlainTextResponse(HTTPStatus.FORBIDDEN.phrase, HTTPStatus.FORBIDDEN)(
+                scope, receive, send
+            )
+        elif scope["type"] == ScopeType.WEBSOCKET and not self._allowed(scope):
+            self._log_refusal(scope)
             await WebSocketClose(WS_1008_POLICY_VIOLATION)(scope, receive, send)
         else:
             await self._app(scope, receive, send)
