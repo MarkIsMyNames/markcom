@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 from contextlib import ExitStack
@@ -10,12 +11,14 @@ from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from markcom.config import CONFIG
-from markcom.tray import Tray, TrayAction, TrayTarget
+from markcom.notifier import NEVER_EXPIRES_SEC
+from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
 
 # No display is needed: Qt draws off screen.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 WAIT_SEC = 2
+app_log = logging.getLogger("app")
 
 
 class SentNotifications(list):
@@ -68,7 +71,10 @@ def make_tray(tmp_path):
         stack.callback(app.shutdown)
 
         def make(notifier=None, target=None, actions=()):
-            return stack.enter_context(Tray(app, icon, notifier, target or FakeWindow(), actions))
+            notifications = None if notifier is None else TrayNotifications(notifier, 8)
+            return stack.enter_context(
+                Tray(app, icon, notifications, target or FakeWindow(), actions)
+            )
 
         yield make
 
@@ -186,3 +192,68 @@ def test_the_icon_shows_until_the_tray_is_left(tmp_path):
 def test_the_tray_does_not_quit_when_its_last_window_closes(make_tray):
     make_tray()
     assert not QApplication.instance().quitOnLastWindowClosed()
+
+
+@pytest.mark.parametrize(
+    ("level", "urgency", "display_sec"),
+    [
+        (logging.ERROR, Urgency.Normal, 8),
+        (logging.CRITICAL, Urgency.Critical, NEVER_EXPIRES_SEC),
+    ],
+)
+def test_error_and_critical_records_are_sent(make_tray, level, urgency, display_sec):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    app_log.log(level, "cannot read %s", "feed")
+    assert [(message, u, d) for _, message, u, d in sent] == [
+        ("cannot read feed", urgency, display_sec)
+    ]
+
+
+def refuse():
+    refused = "connection refused"
+    raise OSError(refused)
+
+
+def test_a_record_with_an_exception_shows_its_text_but_not_the_traceback(make_tray):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    try:
+        refuse()
+    except OSError:
+        app_log.exception("cannot read %s", "feed")
+    assert [message for _, message, _, _ in sent] == ["cannot read feed: connection refused"]
+
+
+@pytest.mark.parametrize("level", [logging.DEBUG, logging.INFO, logging.WARNING])
+def test_records_below_error_are_not_sent(make_tray, level):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    app_log.log(level, "fine")
+    assert sent == []
+
+
+def test_a_repeated_error_is_sent_each_time(make_tray):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    app_log.error("down")
+    app_log.error("down")
+    assert len(sent) == 2
+
+
+def test_a_tray_without_a_notifier_does_not_fail_on_error_records(make_tray):
+    make_tray()
+    app_log.error("down")
+
+
+def test_records_are_not_sent_once_the_tray_is_left(tmp_path):
+    icon_path = tmp_path / "icon.png"
+    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    sent = SentNotifications()
+    with ExitStack() as stack:
+        app = QApplication(["App"])
+        stack.callback(app.shutdown)
+        with Tray(app, icon_path, TrayNotifications(sent, 8), FakeWindow(), ()):
+            pass
+        app_log.error("after")
+    assert sent == []

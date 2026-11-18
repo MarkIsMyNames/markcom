@@ -1,6 +1,6 @@
 """A system tray icon (Qt): left click runs the app's main action, right click shows its other
-actions and Quit. Notifications sent through it count as unread, shown as a badge on the icon,
-until the next left click."""
+actions and Quit. Notifications sent through it, the app's ERROR and CRITICAL log records among
+them, count as unread, shown as a badge on the icon, until the next left click."""
 
 import logging
 from abc import ABC, abstractmethod
@@ -10,7 +10,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import override
+from typing import Self, override
 
 from desktop_notifier import Urgency
 from PySide6.QtCore import QRectF, Qt, QTimer
@@ -18,7 +18,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from markcom.config import CONFIG
-from markcom.notifier import DesktopNotifier
+from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -60,6 +60,41 @@ def _run_logged(run: Callable[[], None]) -> None:
         logger.exception("tray action failed")
 
 
+# Where a log record's notification goes: Tray.send.
+type Send = Callable[[str, str, Urgency, int], None]
+
+
+class _RecordNotifications(logging.Handler):
+    """ERROR records shown for error_display_sec, CRITICAL ones until dismissed. The title is the
+    level; the body is the message, then the exception's own text if the record has one."""
+
+    def __init__(self, send: Send, error_display_sec: int) -> None:
+        super().__init__(logging.ERROR)
+        self._send: Send = send
+        self._error_display_sec: int = error_display_sec
+
+    @override
+    def emit(self, record: logging.LogRecord) -> None:
+        title: str = record.levelname.capitalize()
+        body: str = record.getMessage()
+        if record.exc_info is not None and record.exc_info[1] is not None:
+            # the traceback is for the log; a notification says only why
+            body = f"{body}: {record.exc_info[1]}"
+        if record.levelno >= logging.CRITICAL:
+            self._send(title, body, Urgency.Critical, NEVER_EXPIRES_SEC)
+            return
+        # Normal, not critical: desktops keep critical ones until dismissed, ignoring display_sec
+        self._send(title, body, Urgency.Normal, self._error_display_sec)
+
+
+@dataclass(frozen=True)
+class TrayNotifications:
+    """Where the tray's notifications go, and how long an ERROR log record's notification shows."""
+
+    notifier: DesktopNotifier
+    error_display_sec: int
+
+
 @dataclass(frozen=True)
 class TrayAction:
     """A menu entry."""
@@ -80,21 +115,28 @@ class Tray(AbstractContextManager["Tray"]):
         self,
         app: QApplication,
         icon: Path,
-        notifier: DesktopNotifier | None,
+        notifications: TrayNotifications | None,
         target: TrayTarget,
         actions: Sequence[TrayAction],
     ) -> None:
         """A left click marks every notification read and opens `target`, or closes it if it is
         open. A right click shows `actions`, then Quit. `app` is the app's QApplication; its name
-        is the tooltip. `notifier` is None for an app that sends no notifications."""
+        is the tooltip. `notifications` is None for an app that sends none; otherwise, while the
+        tray is entered, every logger's ERROR records are sent as notifications too."""
         self._app: QApplication = app
         # A tray app's windows come and go; only Quit ends it.
         self._app.setQuitOnLastWindowClosed(False)
-        self._notifier: DesktopNotifier | None = notifier
+        self._notifications: TrayNotifications | None = notifications
         # Changed only on the GUI thread, so it needs no lock.
         self._unread: int = 0
         self._worker: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
         self._target: TrayTarget = target
+        # None: no notifications, so log records go only to the log.
+        self._records: _RecordNotifications | None = (
+            None
+            if notifications is None
+            else _RecordNotifications(self.send, notifications.error_display_sec)
+        )
         # Scaled to fit icon_size, up as well as down, so every icon gets the same badge.
         self._plain: QIcon = QIcon(
             QPixmap(str(icon)).scaled(
@@ -134,7 +176,15 @@ class Tray(AbstractContextManager["Tray"]):
         self._worker.submit(_run_logged, run)
 
     @override
+    def __enter__(self) -> Self:
+        if self._records is not None:
+            logging.getLogger().addHandler(self._records)
+        return self
+
+    @override
     def __exit__(self, *_: object) -> None:
+        if self._records is not None:
+            logging.getLogger().removeHandler(self._records)
         # the app may outlive the tray; a left-over icon would call a stopped worker
         self._icon.hide()
         self._worker.shutdown()
@@ -142,10 +192,10 @@ class Tray(AbstractContextManager["Tray"]):
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         """Send a notification, as DesktopNotifier.send does, and count it as unread; from any
         thread, as Qt runs the count on the GUI thread."""
-        if self._notifier is None:
+        if self._notifications is None:
             no_notifier: str = "this tray was built without a notifier"
             raise RuntimeError(no_notifier)
-        self._notifier.send(title, message, urgency, display_sec)
+        self._notifications.notifier.send(title, message, urgency, display_sec)
         QTimer.singleShot(0, self._app, lambda: self._show_unread(self._unread + 1))
 
     def _show_unread(self, count: int) -> None:
