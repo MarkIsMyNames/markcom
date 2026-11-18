@@ -34,6 +34,9 @@ class _OwnOriginPage(QWebEnginePage):
 
     def _on_navigation(self, request: QWebEngineNavigationRequest) -> None:
         url: QUrl = request.url()
+        logger.debug(
+            "Navigation to %s://%s, main frame %s", url.scheme(), url.host(), request.isMainFrame()
+        )
         if request.isMainFrame() and not self._is_own_origin(url):
             request.reject()
             self._send_away(url)
@@ -50,13 +53,18 @@ class _OwnOriginPage(QWebEnginePage):
         # scheme and host only: URL may carry a token
         if url.scheme() in WebScheme:
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
-            QDesktopServices.openUrl(url)
+            if not QDesktopServices.openUrl(url):
+                logger.warning(
+                    "The desktop could not open a %s link to %s", url.scheme(), url.host()
+                )
         else:
             logger.warning("Refused a %s link to %s", url.scheme(), url.host())
 
     def _on_new_window(self, request: QWebEngineNewWindowRequest) -> None:
+        url: QUrl = request.requestedUrl()
+        logger.debug("New-window request to %s://%s", url.scheme(), url.host())
         # load() goes through _on_navigation, which filters other sites
-        self.load(request.requestedUrl())
+        self.load(url)
 
 
 class WebWindow(TrayTarget):
@@ -82,14 +90,23 @@ class WebWindow(TrayTarget):
     def open(self) -> None:
         # page loads on first open, so the app's server may start after this window
         if self._view.url().isEmpty():
+            logger.info(
+                "Loading %s://%s:%d",
+                self._start.scheme(),
+                self._start.host(),
+                self._start.port(),
+            )
             self._view.load(self._start)
         # show() won't un-minimise; showNormal() alone would drop maximised, which Qt keeps
         # while minimised
         if self._holder.isMaximized():
+            logger.debug("Showing the window maximised")
             self._holder.showMaximized()
         else:
+            logger.debug("Showing the window")
             self._holder.showNormal()
 
     @override
     def close(self) -> None:
+        logger.debug("Hiding the window")
         self._holder.close()
