@@ -95,3 +95,19 @@ def test_an_announcement_after_nicegui_stops_reaches_no_one(monkeypatch):
     with closing(asyncio.new_event_loop()) as stopped:
         monkeypatch.setattr(core, "loop", stopped)
         assert heard_after_announcing() == []
+
+
+class ClosingLoop:
+    """NiceGUI's loop closing between announce's check and its call, as it can while quitting."""
+
+    def is_running(self):
+        return True
+
+    def call_soon_threadsafe(self, *_):
+        closed = "Event loop is closed"
+        raise RuntimeError(closed)
+
+
+def test_an_announcement_as_nicegui_closes_reaches_no_one(monkeypatch):
+    monkeypatch.setattr(core, "loop", ClosingLoop())
+    assert heard_after_announcing() == []

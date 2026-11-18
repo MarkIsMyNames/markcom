@@ -23,7 +23,11 @@ def announce(changed: Event[[]]) -> None:
         return
     logger.debug("change announced")
     # Event.emit schedules on the loop it is called from, so it must run on NiceGUI's.
-    loop.call_soon_threadsafe(changed.emit)
+    try:
+        loop.call_soon_threadsafe(changed.emit)
+    except RuntimeError:
+        # closed since the check above: the app is quitting
+        logger.debug("change announced as NiceGUI closed, so ignored")
 
 
 def keep_current[State](
