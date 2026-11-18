@@ -9,7 +9,7 @@ from starlette.status import WS_1008_POLICY_VIOLATION
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from markcom.own_origin import OwnOriginOnly, local_url
+from markcom.own_origin import InvalidPortError, OwnOriginOnly, local_url
 
 OWN = "http://127.0.0.1:8765"
 LOCALHOST = "http://localhost:8765"
@@ -27,9 +27,9 @@ async def greet(websocket):
     await websocket.close()
 
 
-def guarded(host="127.0.0.1"):
+def guarded(host="127.0.0.1", port=8765):
     routes = [Route("/", page), WebSocketRoute("/ws", greet)]
-    return OwnOriginOnly(Starlette(routes=routes), IPv4Address(host), 8765)
+    return OwnOriginOnly(Starlette(routes=routes), IPv4Address(host), port)
 
 
 def test_local_url_is_the_server_address():
@@ -73,3 +73,15 @@ def test_a_websocket_from_another_origin_is_closed_before_it_connects():
         ):
             pass
         assert refused.value.code == WS_1008_POLICY_VIOLATION
+
+
+@pytest.mark.parametrize("headers", [{}, {"Origin": "http://127.0.0.1"}])
+def test_on_the_default_port_a_host_without_the_port_reaches_a_page(headers):
+    # Browsers leave port 80 out of Host and Origin.
+    with TestClient(guarded(port=80), base_url="http://127.0.0.1") as browser:
+        assert browser.get("/", headers=headers).status_code == HTTPStatus.OK
+
+
+def test_port_zero_is_refused_as_it_is_never_the_real_port():
+    with pytest.raises(InvalidPortError):
+        guarded(port=0)

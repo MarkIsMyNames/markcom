@@ -9,6 +9,7 @@ every request, page and websocket alike, stops both.
 import logging
 from enum import StrEnum
 from http import HTTPStatus
+from http.client import HTTP_PORT
 from ipaddress import IPv4Address
 from socket import INADDR_LOOPBACK
 
@@ -39,6 +40,9 @@ class ScopeType(StrEnum):
     WEBSOCKET = "websocket"
 
 
+class InvalidPortError(ValueError): ...
+
+
 def local_url(host: IPv4Address, port: int) -> HttpUrl:
     return HttpUrl(f"{SCHEME}://{host}:{port}/")
 
@@ -48,9 +52,17 @@ class OwnOriginOnly:
     localhost:port when host is 127.0.0.1."""
 
     def __init__(self, app: ASGIApp, host: IPv4Address, port: int) -> None:
+        if port < 1:
+            # 0 asks the OS for any free port, which this guard can't know, so it'd refuse all
+            invalid: str = f"port {port}: give the port the server listens on"
+            raise InvalidPortError(invalid)
         names: list[str] = [str(host), LOOPBACK_NAME] if host == LOOPBACK else [str(host)]
         self._app: ASGIApp = app
-        self._hosts: frozenset[str] = frozenset(f"{name}:{port}" for name in names)
+        with_port: list[str] = [f"{name}:{port}" for name in names]
+        # Browsers leave the default port out of Host and Origin.
+        self._hosts: frozenset[str] = frozenset(
+            [*with_port, *names] if port == HTTP_PORT else with_port
+        )
         self._origins: frozenset[str] = frozenset(f"{SCHEME}://{h}" for h in self._hosts)
         logger.debug("accepting Host %s", sorted(self._hosts))
 
