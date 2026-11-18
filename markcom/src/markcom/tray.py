@@ -77,16 +77,16 @@ class Tray(AbstractContextManager["Tray"]):
 
     def __init__(
         self,
-        name: str,
+        app: QApplication,
         icon: Path,
         notifier: DesktopNotifier | None,
         target: TrayTarget,
         actions: Sequence[TrayAction],
     ) -> None:
         """A left click marks every notification read and opens `target`, or closes it if it is
-        open. A right click shows `actions`, then Quit. `notifier` is None for an app that sends
-        no notifications."""
-        self._app: QApplication = QApplication([name])
+        open. A right click shows `actions`, then Quit. `app` is the app's QApplication; its name
+        is the tooltip. `notifier` is None for an app that sends no notifications."""
+        self._app: QApplication = app
         # A tray app's windows come and go; only Quit ends it.
         self._app.setQuitOnLastWindowClosed(False)
         self._notifier: DesktopNotifier | None = notifier
@@ -105,7 +105,7 @@ class Tray(AbstractContextManager["Tray"]):
         )
         # A child of the application, so Qt deletes it with the application.
         self._icon: QSystemTrayIcon = QSystemTrayIcon(QIcon(self._badged(0)), self._app)
-        self._icon.setToolTip(name)
+        self._icon.setToolTip(app.applicationName())
         menu: QMenu = QMenu()
         for action in actions:
             menu.addAction(action.label, partial(self._submit, action.run))
@@ -133,9 +133,9 @@ class Tray(AbstractContextManager["Tray"]):
 
     @override
     def __exit__(self, *_: object) -> None:
+        # the app may outlive the tray; a left-over icon would call a stopped worker
+        self._icon.hide()
         self._worker.shutdown()
-        # Release the application, as Qt allows only one at a time.
-        self._app.shutdown()
 
     def run(self) -> None:
         """Show the icon and block until Quit."""

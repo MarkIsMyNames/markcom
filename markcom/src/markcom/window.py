@@ -62,27 +62,29 @@ class _OwnOriginPage(QWebEnginePage):
 
 
 class WebWindow(TrayTarget):
-    """Web page in its own window. Only hidden after the first open(), so the page keeps its
-    state, size, and position. GUI thread only, as Qt requires."""
+    """Web page in its own window. Build it after the QApplication; GUI thread only, as Qt
+    requires. Closing only hides it, so the page keeps its state, size, and position."""
 
     def __init__(self, title: str, url: HttpUrl, icon: Path) -> None:
-        self._title: str = title
-        self._url: HttpUrl = url
-        self._icon: Path = icon
-        # None until first open(): widgets need the QApplication, which Tray or the app
-        # creates after this
-        self._holder: QMainWindow | None = None
+        # view in a holder: closing the view ends its page, closing the holder only hides it
+        self._holder: QMainWindow = QMainWindow()
+        self._view: QWebEngineView = QWebEngineView()
+        self._holder.setCentralWidget(self._view)
+        self._start: QUrl = QUrl(str(url))
+        self._view.setPage(_OwnOriginPage(self._start, self._holder))
+        self._holder.setWindowTitle(title)
+        self._holder.setWindowIcon(QIcon(str(icon)))
+        self._holder.resize(CONFIG.window.width, CONFIG.window.height)
 
     @override
     def is_open(self) -> bool:
-        return (
-            self._holder is not None and self._holder.isVisible() and not self._holder.isMinimized()
-        )
+        return self._holder.isVisible() and not self._holder.isMinimized()
 
     @override
     def open(self) -> None:
-        if self._holder is None:
-            self._holder = self._build()
+        # page loads on first open, so the app's server may start after this window
+        if self._view.url().isEmpty():
+            self._view.load(self._start)
         # show() won't un-minimise; showNormal() alone would drop maximised, which Qt keeps
         # while minimised
         if self._holder.isMaximized():
@@ -92,18 +94,4 @@ class WebWindow(TrayTarget):
 
     @override
     def close(self) -> None:
-        if self._holder is not None:
-            self._holder.close()
-
-    def _build(self) -> QMainWindow:
-        # view in a holder: closing the view ends its page, closing the holder only hides it
-        holder: QMainWindow = QMainWindow()
-        view: QWebEngineView = QWebEngineView()
-        holder.setCentralWidget(view)
-        start: QUrl = QUrl(str(self._url))
-        view.setPage(_OwnOriginPage(start, holder))
-        view.load(start)
-        holder.setWindowTitle(self._title)
-        holder.setWindowIcon(QIcon(str(self._icon)))
-        holder.resize(CONFIG.window.width, CONFIG.window.height)
-        return holder
+        self._holder.close()

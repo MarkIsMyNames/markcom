@@ -57,17 +57,18 @@ class FakeWindow(TrayTarget):
 
 @pytest.fixture
 def make_tray(tmp_path):
-    """Builds a tray, entered for the test and left after it; each test gets its own, which
-    also shows that leaving a tray releases Qt's one application."""
+    """Builds a tray on its own QApplication; both end with the test, as Qt allows one at a
+    time."""
     icon = tmp_path / "icon.png"
-    # A QImage, as a QPixmap needs the application the tray makes.
     image = QImage(64, 64, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
     image.save(str(icon))
     with ExitStack() as stack:
+        app = QApplication(["App"])
+        stack.callback(app.shutdown)
 
         def make(notifier=None, target=None, actions=()):
-            return stack.enter_context(Tray("App", icon, notifier, target or FakeWindow(), actions))
+            return stack.enter_context(Tray(app, icon, notifier, target or FakeWindow(), actions))
 
         yield make
 
@@ -169,6 +170,17 @@ def test_quit_ends_run(make_tray):
     tray = make_tray()
     QTimer.singleShot(0, icon().contextMenu().actions()[-1].trigger)
     tray.run()
+
+
+def test_leaving_the_tray_hides_its_icon(tmp_path):
+    icon_path = tmp_path / "icon.png"
+    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    with ExitStack() as stack:
+        app = QApplication(["App"])
+        stack.callback(app.shutdown)
+        with Tray(app, icon_path, None, FakeWindow(), ()):
+            icon().show()
+        assert not icon().isVisible()
 
 
 def test_the_tray_does_not_quit_when_its_last_window_closes(make_tray):

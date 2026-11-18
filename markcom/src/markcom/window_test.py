@@ -49,6 +49,7 @@ def serve(folder, handler):
 def other_site(tmp_path_factory):
     folder = tmp_path_factory.mktemp("other")
     (folder / "inner.html").write_text("<title>Inner</title>", encoding="utf-8")
+    (folder / "late.html").write_text("<title>Late</title>", encoding="utf-8")
     requests = []
 
     class Handler(RecordingHandler):
@@ -243,6 +244,19 @@ def test_a_window_minimised_while_maximised_comes_back_maximised(make_window):
     assert shown().isMaximized()
 
 
+@pytest.mark.usefixtures("qt_app")
+def test_the_page_loads_on_the_first_open_not_before(other_site, icon):
+    base, requests = other_site
+    window = WebWindow("Late", HttpUrl(f"{base}/late.html"), icon)
+    try:
+        wait_until(lambda: False, QUIET_MS)
+        assert "/late.html" not in requests
+        window.open()
+        assert wait_until(lambda: "/late.html" in requests)
+    finally:
+        window.close()
+
+
 def test_a_same_origin_link_loads_in_the_window(make_window, browser):
     make_window().open()
     assert wait_until(lambda: view().title() == "Home")
@@ -298,8 +312,8 @@ def test_another_origin_in_an_iframe_loads_in_the_page(browser, site, other_site
 
 def run_a_window_without_a_tray(url, icon):
     """Child process: exec() ends WebEngine for the whole process."""
-    window = WebWindow("Solo", HttpUrl(url), icon)
     app = QApplication(["Solo"])
+    window = WebWindow("Solo", HttpUrl(url), icon)
     window.open()
     # posted call runs once exec() starts
     QTimer.singleShot(0, window.close)
