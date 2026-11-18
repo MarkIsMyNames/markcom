@@ -55,7 +55,7 @@ class SessionBus(NotificationBus):
         try:
             with closing(sd_bus_open_user()) as bus:
                 notifications: FreedesktopNotifications = FreedesktopNotifications(bus)
-                notifications.notify(
+                notification_id: int = notifications.notify(
                     app_name=call.app_name,
                     app_icon=call.icon,
                     summary=call.title,
@@ -66,6 +66,7 @@ class SessionBus(NotificationBus):
                     ),
                     expire_timeout=call.timeout_ms,
                 )
+                logger.debug("bus showed notification %d", notification_id)
         except SdBusBaseError as error:
             raise NotificationError(str(error)) from error
 
@@ -102,13 +103,20 @@ class FreedesktopBackend(NotificationBackend):
 
 
 def find_desktop_entry(desktop_entry: str, data_dirs: Sequence[Path]) -> str:
-    if not any(
-        (data_dir / APPLICATIONS / f"{desktop_entry}{DESKTOP_SUFFIX}").is_file()
-        for data_dir in data_dirs
-    ):
+    # None: installed in none of the data folders
+    found: Path | None = next(
+        (
+            path
+            for data_dir in data_dirs
+            if (path := data_dir / APPLICATIONS / f"{desktop_entry}{DESKTOP_SUFFIX}").is_file()
+        ),
+        None,
+    )
+    if found is None:
         searched: str = ", ".join(str(data_dir / APPLICATIONS) for data_dir in data_dirs)
         missing: str = f"no {desktop_entry}{DESKTOP_SUFFIX} in {searched}"
         raise MissingDesktopEntryError(missing)
+    logger.debug("desktop entry %s found at %s", desktop_entry, found)
     return desktop_entry
 
 
@@ -136,6 +144,7 @@ def install_desktop_entry(app_name: str, icon: Path, data_home: Path) -> str:
                     f"{path} belongs to another application; pass its ID as desktop_entry"
                 )
                 raise DesktopEntryConflictError(conflict)
+            logger.debug("%s is already this app's", path)
             return desktop_entry
         entry: DesktopFile = DesktopFile()
         # Exec is required by the spec; NoDisplay keeps the entry out of application menus.
@@ -153,7 +162,7 @@ def install_desktop_entry(app_name: str, icon: Path, data_home: Path) -> str:
         logger.info("wrote %s", path)
     except OSError:
         # Notifications still show; Plasma only leaves them out of its history.
-        logger.exception("could not write %s for notification history", path)
+        logger.warning("could not write %s for notification history", path, exc_info=True)
     return desktop_entry
 
 
