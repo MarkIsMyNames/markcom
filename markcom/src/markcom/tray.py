@@ -69,7 +69,8 @@ class TrayAction:
 
 
 class Tray(AbstractContextManager["Tray"]):
-    """Tray icon; build it and call run() on the main thread.
+    """Tray icon, shown until the tray is left; build it on the main thread, then run
+    app.exec().
 
     Left click toggles the target on the GUI thread, as Qt widgets require. Menu actions run one
     at a time on the tray's worker, so a slow one can't freeze the menu.
@@ -115,10 +116,11 @@ class Tray(AbstractContextManager["Tray"]):
         def clicked(reason: QSystemTrayIcon.ActivationReason) -> None:
             if reason is QSystemTrayIcon.ActivationReason.Trigger:
                 self._show_unread(0)
-                _run_logged(self._open_or_close)
+                self._open_or_close()
 
         self._icon.setContextMenu(menu)
         self._icon.activated.connect(clicked)
+        self._icon.show()
 
     def _open_or_close(self) -> None:
         if self._target.is_open():
@@ -136,11 +138,6 @@ class Tray(AbstractContextManager["Tray"]):
         # the app may outlive the tray; a left-over icon would call a stopped worker
         self._icon.hide()
         self._worker.shutdown()
-
-    def run(self) -> None:
-        """Show the icon and block until Quit."""
-        self._icon.show()
-        self._app.exec()
 
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         """Send a notification, as DesktopNotifier.send does, and count it as unread; from any

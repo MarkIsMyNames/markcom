@@ -166,20 +166,20 @@ def test_a_tray_without_a_notifier_refuses_to_send(make_tray):
         tray.send("t", "m", Urgency.Critical, 0)
 
 
-def test_quit_ends_run(make_tray):
-    tray = make_tray()
+def test_quit_ends_exec(make_tray):
+    make_tray()
     QTimer.singleShot(0, icon().contextMenu().actions()[-1].trigger)
-    tray.run()
+    QApplication.instance().exec()
 
 
-def test_leaving_the_tray_hides_its_icon(tmp_path):
+def test_the_icon_shows_until_the_tray_is_left(tmp_path):
     icon_path = tmp_path / "icon.png"
     QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
     with ExitStack() as stack:
         app = QApplication(["App"])
         stack.callback(app.shutdown)
         with Tray(app, icon_path, None, FakeWindow(), ()):
-            icon().show()
+            assert icon().isVisible()
         assert not icon().isVisible()
 
 
