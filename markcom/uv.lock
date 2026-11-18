@@ -639,7 +639,6 @@ dependencies = [
 [package.optional-dependencies]
 desktop = [
     { name = "desktop-notifier" },
-    { name = "pyside6-essentials" },
     { name = "python-slugify" },
     { name = "sdbus" },
     { name = "sdbus-notifications" },
@@ -647,7 +646,6 @@ desktop = [
 ]
 window = [
     { name = "desktop-notifier" },
-    { name = "pyside6-essentials" },
     { name = "pyside6-webengine" },
     { name = "python-slugify" },
     { name = "sdbus" },
@@ -673,7 +671,6 @@ requires-dist = [
     { name = "markcom", extras = ["desktop"], marker = "extra == 'window'" },
     { name = "pydantic", specifier = ">=2.14" },
     { name = "pydantic-settings", specifier = ">=2.12" },
-    { name = "pyside6-essentials", marker = "extra == 'desktop'", specifier = ">=6.12" },
     { name = "pyside6-webengine", marker = "extra == 'window'", specifier = ">=6.12" },
     { name = "python-slugify", marker = "extra == 'desktop'", specifier = ">=9.2.0" },
     { name = "sdbus", marker = "extra == 'desktop'", specifier = ">=0.14.3" },

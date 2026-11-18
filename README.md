@@ -4,7 +4,7 @@ Shared libraries for my Python and TypeScript projects.
 
 | Folder | Package | For |
 |---|---|---|
-| `markcom/` | `markcom` (Python, installed from git) | typed `config.json`, secrets from `.env`, logging and the `run()` entry point; with the `desktop` extra, notifications and a tray icon; with the `window` extra, a web frontend in its own window (`markcom.window`) |
+| `markcom/` | `markcom` (Python, installed from git) | typed `config.json`, secrets from `.env`, logging and the `run()` entry point; with the `desktop` extra, notifications; with the `window` extra, a tray icon and a web frontend in its own window (`markcom.tray`, `markcom.window`) |
 | `markcom-i18n/` | `@markcom/i18n` (npm) | locale lookup, browser-language detection, i18next set-up, the `index.html` locale plugin, `/<lang>/` routing, and build-time checks of every locale file; its `e2e/` tests the routing on a small test site |
 | `markcom-web-config/` | `@markcom/web-config` (npm) | shared ESLint, Prettier, TypeScript and Vitest coverage settings |
 
@@ -20,7 +20,7 @@ dependencies = ["markcom"]
 markcom = { git = "https://github.com/MarkIsMyNames/markcom", subdirectory = "markcom", tag = "markcom-v<version>" }
 ```
 
-The `window` extra (`markcom[window]`) adds `markcom.window`, which shows a web frontend in its own window with QtWebEngine. It downloads about 176 MB more on Linux (pyside6-webengine plus pyside6-addons). The window keeps no cookies or site storage between runs, and it does not download files.
+The `desktop` extra (`markcom[desktop]`) sends notifications and needs no Qt. The `window` extra (`markcom[window]`) adds the tray icon and `markcom.window`, which shows a web frontend in its own window with QtWebEngine; it downloads Qt and WebEngine, about 260 MB on Linux (pyside6-webengine, pyside6-addons and pyside6-essentials). The window keeps no cookies or site storage between runs, and it does not download files.
 
 TypeScript, from npm:
 

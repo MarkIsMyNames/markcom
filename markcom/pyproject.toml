@@ -9,16 +9,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Desktop apps only: notifications (markcom.notifier) and the tray icon (markcom.tray).
+# Desktop notifications (markcom.notifier); no Qt, so notification-only apps stay small.
 desktop = [
     "desktop-notifier>=6.2",
-    "pyside6-essentials>=6.12",
     "python-slugify>=9.2.0",
     "sdbus>=0.14.3",
     "sdbus-notifications>=1.0.3",
     "xdg-base-dirs>=6.1.0",
 ]
-# Web window (markcom.window); own extra, as WebEngine adds ~176 MB tray-only apps skip.
+# Tray and web window (markcom.tray, markcom.window): every tray app has a window.
 window = [
     "markcom[desktop]",
     "pyside6-webengine>=6.12",
