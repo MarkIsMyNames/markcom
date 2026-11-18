@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor, QDesktopServices, QImage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QWidget
 
-from markcom.window import Application, WebWindow
+from markcom.window import WebWindow
 
 # no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
 # pages.
@@ -299,11 +299,11 @@ def test_another_origin_in_an_iframe_loads_in_the_page(browser, site, other_site
 def run_a_window_without_a_tray(url, icon):
     """Child process: exec() ends WebEngine for the whole process."""
     window = WebWindow("Solo", HttpUrl(url), icon)
-    with Application("Solo") as app:
-        window.open()
-        # posted call runs once exec() starts
-        QTimer.singleShot(0, window.close)
-        app.exec()
+    app = QApplication(["Solo"])
+    window.open()
+    # posted call runs once exec() starts
+    QTimer.singleShot(0, window.close)
+    app.exec()
 
 
 def test_without_a_tray_closing_the_window_quits_the_app(site, icon):

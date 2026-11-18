@@ -3,7 +3,7 @@ QtWebEngine must load first."""
 
 import logging
 from pathlib import Path
-from typing import Self, override
+from typing import override
 
 from pydantic import HttpUrl
 from PySide6.QtCore import QUrl
@@ -14,7 +14,7 @@ from PySide6.QtWebEngineCore import (
     QWebEnginePage,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
+from PySide6.QtWidgets import QMainWindow, QWidget
 
 from markcom.config import CONFIG
 from markcom.tray import TrayTarget
@@ -69,7 +69,7 @@ class WebWindow(TrayTarget):
         self._title: str = title
         self._url: HttpUrl = url
         self._icon: Path = icon
-        # None until first open(): widgets need the QApplication, which Tray or Application
+        # None until first open(): widgets need the QApplication, which Tray or the app
         # creates after this
         self._holder: QMainWindow | None = None
 
@@ -107,20 +107,3 @@ class WebWindow(TrayTarget):
         holder.setWindowIcon(QIcon(str(self._icon)))
         holder.resize(CONFIG.window.width, CONFIG.window.height)
         return holder
-
-
-class Application(QApplication):
-    """Qt application for an app with no tray; exec() on the main thread.
-
-    `with` shuts it down: Qt allows one at a time. Closing the last window quits (Qt default);
-    Tray turns that off, so there a close only hides.
-    """
-
-    def __init__(self, name: str) -> None:
-        super().__init__([name])
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        self.shutdown()
