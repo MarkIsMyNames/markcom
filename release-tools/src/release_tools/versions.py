@@ -51,13 +51,11 @@ class Version:
         return cls(major, minor, patch)
 
     def bump(self, level: BumpLevel) -> Self:
-        match level:
-            case BumpLevel.PATCH:
-                return type(self)(self.major, self.minor, self.patch + 1)
-            case BumpLevel.MINOR:
-                return type(self)(self.major, self.minor + 1, 0)
-            case BumpLevel.MAJOR:
-                return type(self)(self.major + 1, 0, 0)
+        if level is BumpLevel.MAJOR:
+            return type(self)(self.major + 1, 0, 0)
+        if level is BumpLevel.MINOR:
+            return type(self)(self.major, self.minor + 1, 0)
+        return type(self)(self.major, self.minor, self.patch + 1)
 
     @override
     def __str__(self) -> str:
