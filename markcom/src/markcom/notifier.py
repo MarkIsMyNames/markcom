@@ -66,5 +66,5 @@ class DesktopNotifier:
             return
         try:
             self._backend.send(title, message, urgency, display_sec)
-        except BACKEND_ERRORS as error:
-            logger.warning("desktop notification failed: %s", error)
+        except BACKEND_ERRORS:
+            logger.exception("desktop notification failed")

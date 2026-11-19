@@ -168,7 +168,7 @@ def install_desktop_entry(app_name: str, icon: Path, data_home: Path) -> str:
         logger.info("wrote %s", path)
     except DESKTOP_FILE_ERRORS:
         # Notifications still show; Plasma only leaves them out of its history.
-        logger.warning("could not read or write %s for notification history", path, exc_info=True)
+        logger.exception("could not read or write %s for notification history", path)
     return desktop_entry
 
 

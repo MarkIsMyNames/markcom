@@ -1,7 +1,9 @@
 import logging
 import os
+import platform
 import threading
 from contextlib import ExitStack
+from pathlib import Path
 from typing import override
 
 import pytest
@@ -10,8 +12,9 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+from markcom import notifier as notifier_module
 from markcom.config import CONFIG
-from markcom.notifier import NEVER_EXPIRES_SEC
+from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
 from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
 
 # No display is needed: Qt draws off screen.
@@ -312,3 +315,24 @@ class FailingNotifications:
 def test_a_failing_notifier_does_not_break_the_apps_logging(make_tray):
     make_tray(notifier=FailingNotifications())
     app_log.error("down")
+
+
+class GoneBus:
+    """DesktopNotifierSync stand-in whose notification service is gone: counts each attempt."""
+
+    def __init__(self):
+        self.attempts = 0
+
+    def send(self, **_):
+        self.attempts += 1
+        gone = "bus gone"
+        raise OSError(gone)
+
+
+def test_a_failed_notification_is_not_itself_sent_as_a_notification(make_tray, monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    bus = GoneBus()
+    monkeypatch.setattr(notifier_module, "DesktopNotifierSync", lambda **_: bus)
+    make_tray(notifier=DesktopNotifier("App", Path("app.png")))
+    app_log.error("down")
+    assert bus.attempts == 1

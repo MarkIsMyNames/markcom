@@ -64,9 +64,7 @@ class _OwnOriginPage(QWebEnginePage):
         if _is_web_link(url):
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
             if not QDesktopServices.openUrl(url):
-                logger.warning(
-                    "The desktop could not open a %s link to %s", url.scheme(), url.host()
-                )
+                logger.error("The desktop could not open a %s link to %s", url.scheme(), url.host())
         else:
             logger.warning("Refused a %s link to %s", url.scheme(), url.host())
 

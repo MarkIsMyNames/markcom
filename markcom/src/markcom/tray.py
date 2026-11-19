@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from markcom.config import CONFIG
 from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
+from markcom.notifier import logger as notifier_logger
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -71,6 +72,11 @@ class _RecordNotifications(logging.Handler):
         super().__init__(logging.ERROR)
         self._send: Send = send
         self._error_display_sec: int = error_display_sec
+
+    @override
+    def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
+        # the notifier's own failure: sending it would fail and log again, without end
+        return record.name != notifier_logger.name and super().filter(record)
 
     @override
     def emit(self, record: logging.LogRecord) -> None:
