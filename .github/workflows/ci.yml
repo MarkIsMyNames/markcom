@@ -144,7 +144,6 @@ jobs:
   # release:minor or release:major label (a patch without one), is committed to main and tagged
   # <library>-v<version>. markcom's tag is what projects install it by and Renovate watches. The
   # job fails if main has moved past its commit; the run for the newest commit releases.
-
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [markcom, markcom-integration, web-libraries, release-tools]
