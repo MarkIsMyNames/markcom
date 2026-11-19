@@ -30,13 +30,13 @@ def run[TConfig: BaseAppConfig, TSecrets: BaseSecrets, TResult](
         sys.stderr.write(f"Configuration error: {error}\n")
         sys.exit(ExitCode.CONFIG_ERROR)
     configure_logging(config.log_level)
-    logger.info("Configuration loaded from %s, log level %s", config_path, config.log_level)
-    # names only, never values
+    # variable names only, never values
     logger.info(
-        "Environment variables read: %s",
+        "Starting the app: configuration from %s, log level %s, environment variables %s",
+        config_path,
+        config.log_level,
         sorted(name.upper() for name in type(secrets).model_fields),
     )
-    logger.info("Starting the app")
     result: TResult = main(config, secrets)
     logger.info("The app returned")
     return result
