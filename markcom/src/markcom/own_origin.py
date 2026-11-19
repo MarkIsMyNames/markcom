@@ -19,7 +19,7 @@ from starlette.status import WS_1008_POLICY_VIOLATION
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocketClose
 
-from markcom.web_scheme import HOST_HEADER, ORIGIN_HEADER, ScopeType, WebScheme
+from markcom.web_scheme import HOST_HEADER, ORIGIN_HEADER, WebProtocol
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ LOOPBACK: IPv4Address = IPv4Address(INADDR_LOOPBACK)
 # What browsers also call LOOPBACK.
 LOOPBACK_NAME: str = "localhost"
 # Loopback only, so no TLS.
-SCHEME: WebScheme = WebScheme.HTTP
+SCHEME: WebProtocol = WebProtocol.HTTP
 
 
 class InvalidPortError(ValueError): ...
@@ -75,12 +75,12 @@ class OwnOriginOnly:
         )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == ScopeType.HTTP and not self._allowed(scope):
+        if scope["type"] == WebProtocol.HTTP and not self._allowed(scope):
             self._log_refusal(scope)
             await PlainTextResponse(HTTPStatus.FORBIDDEN.phrase, HTTPStatus.FORBIDDEN)(
                 scope, receive, send
             )
-        elif scope["type"] == ScopeType.WEBSOCKET and not self._allowed(scope):
+        elif scope["type"] == WebProtocol.WEBSOCKET and not self._allowed(scope):
             self._log_refusal(scope)
             await WebSocketClose(WS_1008_POLICY_VIOLATION)(scope, receive, send)
         else:

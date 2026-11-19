@@ -18,9 +18,12 @@ from PySide6.QtWidgets import QMainWindow, QWidget
 
 from markcom.config import CONFIG
 from markcom.tray import TrayTarget
-from markcom.web_scheme import WebScheme
+from markcom.web_scheme import WebProtocol
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+# Links that leave the window for the default browser; any other scheme is refused.
+BROWSER_SCHEMES: frozenset[WebProtocol] = frozenset({WebProtocol.HTTP, WebProtocol.HTTPS})
 
 
 class _OwnOriginPage(QWebEnginePage):
@@ -51,7 +54,7 @@ class _OwnOriginPage(QWebEnginePage):
     @staticmethod
     def _send_away(url: QUrl) -> None:
         # scheme and host only: URL may carry a token
-        if url.scheme() in WebScheme:
+        if url.scheme() in BROWSER_SCHEMES:
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
             if not QDesktopServices.openUrl(url):
                 logger.error("The desktop could not open a %s link to %s", url.scheme(), url.host())

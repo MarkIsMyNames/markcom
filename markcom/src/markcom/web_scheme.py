@@ -6,15 +6,10 @@ HOST_HEADER: str = "host"
 ORIGIN_HEADER: str = "origin"
 
 
-class WebScheme(StrEnum):
-    """URL schemes of the web."""
+class WebProtocol(StrEnum):
+    """Web protocols, by the names URL schemes (http, https) and ASGI scope types (http,
+    websocket) give them."""
 
     HTTP = "http"
     HTTPS = "https"
-
-
-class ScopeType(StrEnum):
-    """The ASGI scope types the guard checks; any other (lifespan) passes straight through."""
-
-    HTTP = "http"
     WEBSOCKET = "websocket"
