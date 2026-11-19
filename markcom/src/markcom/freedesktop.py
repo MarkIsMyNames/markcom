@@ -5,6 +5,7 @@ import asyncio
 import configparser
 import logging
 from collections.abc import Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
@@ -35,6 +36,11 @@ NOTIFY_SIGNATURE: str = "susssasa{sv}i"
 NEW_NOTIFICATION: int = 0
 DESKTOP_ENTRY_HINT: str = "desktop-entry"
 URGENCY_HINT: str = "urgency"
+# D-Bus type codes of the two hints
+STRING_TYPE: str = "s"
+BYTE_TYPE: str = "y"
+# What a failed connection or call raises; EOFError when the bus hangs up mid-call.
+DBUS_ERRORS: tuple[type[Exception], ...] = (DBusFastError, EOFError)
 # A malformed or non-UTF-8 existing .desktop file is left as it is: it may be another app's.
 DESKTOP_FILE_ERRORS: tuple[type[Exception], ...] = (
     OSError,
@@ -79,19 +85,27 @@ class SessionConnection:
 
 
 class SessionBus(NotificationBus):
+    def __init__(self, reply_timeout_sec: float) -> None:
+        self._reply_timeout_sec: float = reply_timeout_sec
+
     @override
     def notify(self, call: NotifyCall) -> None:
-        try:
-            # dbus-fast is async only; a send runs on the caller's thread, outside any event loop
-            notification_id: int = asyncio.run(self._notify(call))
-        except DBusFastError as error:
-            raise NotificationError(str(error)) from error
+        # dbus-fast is async only; its own loop on a worker thread works whether or not the
+        # caller's thread already runs one, as uvicorn's does
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            sending: Future[int] = worker.submit(self._send, call)
+            try:
+                notification_id: int = sending.result()
+            except DBUS_ERRORS as error:
+                raise NotificationError(str(error)) from error
         logger.debug("bus showed notification %d", notification_id)
 
-    @staticmethod
-    async def _notify(call: NotifyCall) -> int:
+    def _send(self, call: NotifyCall) -> int:
+        return asyncio.run(self._notify(call))
+
+    async def _notify(self, call: NotifyCall) -> int:
         async with (
-            asyncio.timeout(CONFIG.notification_reply_timeout_sec),
+            asyncio.timeout(self._reply_timeout_sec),
             SessionConnection() as bus,
         ):
             reply: Message = await bus.call(
@@ -109,8 +123,8 @@ class SessionBus(NotificationBus):
                         call.message,
                         [],
                         {
-                            DESKTOP_ENTRY_HINT: Variant("s", call.desktop_entry),
-                            URGENCY_HINT: Variant("y", FreedesktopUrgency[call.urgency.name]),
+                            DESKTOP_ENTRY_HINT: Variant(STRING_TYPE, call.desktop_entry),
+                            URGENCY_HINT: Variant(BYTE_TYPE, FreedesktopUrgency[call.urgency.name]),
                         },
                         call.timeout_ms,
                     ],
@@ -220,4 +234,6 @@ def open_backend(app_name: str, icon: Path, desktop_entry: str | None) -> Notifi
         else find_desktop_entry(desktop_entry, [xdg_data_home(), *xdg_data_dirs()])
     )
     logger.info("notifications name the desktop entry %s", entry)
-    return FreedesktopBackend(app_name, icon, entry, SessionBus())
+    return FreedesktopBackend(
+        app_name, icon, entry, SessionBus(CONFIG.notification_reply_timeout_sec)
+    )

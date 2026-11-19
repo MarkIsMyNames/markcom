@@ -13,8 +13,7 @@ from dbus_fast import Message, MessageType, NameFlag, RequestNameReply
 from dbus_fast.aio import MessageBus
 from desktop_notifier import Urgency
 
-from markcom import freedesktop
-from markcom.config import CONFIG
+from markcom.freedesktop import NotifyCall, SessionBus
 from markcom.notifier import DesktopNotifier
 
 SERVICE = "org.freedesktop.Notifications"
@@ -147,12 +146,15 @@ def test_rejected_notification_is_not_raised():
     assert service.next_call()
 
 
+def test_unanswered_notification_times_out():
+    call = NotifyCall("App", "app.png", "t", "m", Urgency.Normal, "app", 3000)
+    with FakeNotificationService(ignore), pytest.raises(TimeoutError):
+        SessionBus(0.5).notify(call)
+
+
 @pytest.mark.usefixtures("data_folders")
-def test_unanswered_notification_times_out(monkeypatch):
-    short = CONFIG.model_copy(update={"notification_reply_timeout_sec": 0.5})
-    monkeypatch.setattr(freedesktop, "CONFIG", short)
-    with FakeNotificationService(ignore) as service:
-        DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
+async def test_notification_sent_from_inside_an_event_loop_arrives(service):
+    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
     assert service.next_call()
 
 
