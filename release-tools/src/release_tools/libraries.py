@@ -23,13 +23,21 @@ class UnreadableVersionError(RuntimeError):
 
 class Library(ABC):
     """One library this repository releases, in the folder named after it. A release follows a
-    change to its code (`code_paths`, git pathspecs) or to its install manifest."""
+    change to its code or to its install manifest. `code_paths` are its code, and
+    `ignored_paths` the patterns inside them that are not (its tests), both relative to its
+    folder."""
 
     manifest: ClassVar[str]
 
-    def __init__(self, name: str, code_paths: tuple[str, ...]) -> None:
+    def __init__(
+        self, name: str, code_paths: tuple[str, ...], ignored_paths: tuple[str, ...]
+    ) -> None:
         self.name = name
-        self.code_paths = code_paths
+        # git pathspecs from the repository root; an exclude pattern's * also matches /
+        self._pathspecs = (
+            *(f"{name}/{path}" for path in code_paths),
+            *(f":(exclude){name}/{pattern}" for pattern in ignored_paths),
+        )
 
     def tag(self, version: Version) -> str:
         return f"{self.name}-v{version}"
@@ -50,7 +58,7 @@ class Library(ABC):
     def release_inputs_changed(self, repo: Repo, since: str, until: str) -> bool:
         before = self._install_manifest(self._manifest_at(repo, since))
         after = self._install_manifest(self._manifest_at(repo, until))
-        changed_code = repo.git.diff("--name-only", since, until, "--", *self.code_paths)
+        changed_code = repo.git.diff("--name-only", since, until, "--", *self._pathspecs)
         return before != after or bool(changed_code)
 
     def _manifest_at(self, repo: Repo, revision: str) -> str:
@@ -125,16 +133,12 @@ class NpmLibrary(Library):
 
 
 LIBRARIES: tuple[Library, ...] = (
-    PythonLibrary("markcom", ("markcom/src", ":(exclude)*_test.py")),
+    PythonLibrary("markcom", code_paths=("src",), ignored_paths=("*_test.py",)),
     NpmLibrary(
         "markcom-web-config",
-        (
-            "markcom-web-config/src",
-            ":(exclude)*.test.ts",
-            # projects extend these two directly, so they are its code
-            "markcom-web-config/tsconfig.json",
-            "markcom-web-config/prettier.json",
-        ),
+        # projects extend tsconfig.json and prettier.json directly, so they are its code
+        code_paths=("src", "tsconfig.json", "prettier.json"),
+        ignored_paths=("*.test.ts",),
     ),
-    NpmLibrary("markcom-i18n", ("markcom-i18n/src", ":(exclude)*.test.ts")),
+    NpmLibrary("markcom-i18n", code_paths=("src",), ignored_paths=("*.test.ts",)),
 )
