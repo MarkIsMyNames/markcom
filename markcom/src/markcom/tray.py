@@ -6,7 +6,6 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -125,7 +124,7 @@ def _run_logged(action: TrayAction) -> None:
     logger.info("tray action %r finished", action.label)
 
 
-class Tray(AbstractContextManager["Tray"]):
+class Tray:
     """Tray icon, shown until the tray is left; build it on the main thread, then run
     app.exec().
 
@@ -201,7 +200,6 @@ class Tray(AbstractContextManager["Tray"]):
         logger.debug("tray action %r queued", action.label)
         self._worker.submit(_run_logged, action)
 
-    @override
     def __enter__(self) -> Self:
         if self._records is not None:
             logging.getLogger().addHandler(self._records)
@@ -209,7 +207,6 @@ class Tray(AbstractContextManager["Tray"]):
         logger.info("tray icon shown")
         return self
 
-    @override
     def __exit__(self, *_: object) -> None:
         if self._records is not None:
             logging.getLogger().removeHandler(self._records)

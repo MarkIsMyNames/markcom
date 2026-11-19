@@ -9,10 +9,9 @@ one it leaves them alone.
 import logging
 import threading
 from collections.abc import Callable
-from contextlib import AbstractContextManager
 from ipaddress import IPv4Address
 from socket import socket
-from typing import Self, override
+from typing import Self
 
 import uvicorn
 from nicegui import core
@@ -53,7 +52,7 @@ def configure(root: Callable[[], None], title: str) -> None:
     core.root = root
 
 
-class UiServer(AbstractContextManager["UiServer"]):
+class UiServer:
     """Entering starts serving on a thread; leaving tells uvicorn to stop, which closes every
     connection, and joins the thread.
 
@@ -86,13 +85,11 @@ class UiServer(AbstractContextManager["UiServer"]):
             target=self._server.run, kwargs={"sockets": [self._socket]}, name="ui"
         )
 
-    @override
     def __enter__(self) -> Self:
         self._thread.start()
         logger.info("serving %r at %s", self._title, self._url)
         return self
 
-    @override
     def __exit__(self, *_: object) -> None:
         logger.info("stopping %r", self._title)
         self._server.should_exit = True
