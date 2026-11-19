@@ -13,6 +13,8 @@ from dbus_fast import Message, MessageType, NameFlag, RequestNameReply
 from dbus_fast.aio import MessageBus
 from desktop_notifier import Urgency
 
+from markcom import freedesktop
+from markcom.config import CONFIG
 from markcom.notifier import DesktopNotifier
 
 SERVICE = "org.freedesktop.Notifications"
@@ -26,6 +28,11 @@ def accept(message):
 
 def reject(message):
     return Message.new_error(message, "org.freedesktop.DBus.Error.Failed", "rejected")
+
+
+def ignore(_message):
+    # True: handled, so the bus sends no reply either
+    return True
 
 
 async def serve(reply, events, stop):
@@ -56,7 +63,7 @@ def run_service(reply, events, stop):
 
 class FakeNotificationService:
     """Owns org.freedesktop.Notifications in its own process, as a real one does: run as a
-    thread of the test process, it never received sdbus's blocking call."""
+    thread of the test process, it never received markcom's blocking call."""
 
     def __init__(self, reply):
         self._events = multiprocessing.Queue()
@@ -136,6 +143,15 @@ def test_app_with_an_entry_names_its_own_file(service, data_folders):
 @pytest.mark.usefixtures("data_folders")
 def test_rejected_notification_is_not_raised():
     with FakeNotificationService(reject) as service:
+        DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
+    assert service.next_call()
+
+
+@pytest.mark.usefixtures("data_folders")
+def test_unanswered_notification_times_out(monkeypatch):
+    short = CONFIG.model_copy(update={"notification_reply_timeout_sec": 0.5})
+    monkeypatch.setattr(freedesktop, "CONFIG", short)
+    with FakeNotificationService(ignore) as service:
         DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
     assert service.next_call()
 

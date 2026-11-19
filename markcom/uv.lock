@@ -1055,10 +1055,9 @@ dependencies = [
 
 [package.optional-dependencies]
 desktop = [
+    { name = "dbus-fast" },
     { name = "desktop-notifier" },
     { name = "python-slugify" },
-    { name = "sdbus" },
-    { name = "sdbus-notifications" },
     { name = "xdg-base-dirs" },
 ]
 nicegui = [
@@ -1071,18 +1070,16 @@ web = [
     { name = "starlette" },
 ]
 window = [
+    { name = "dbus-fast" },
     { name = "desktop-notifier" },
     { name = "pyside6-webengine" },
     { name = "python-slugify" },
-    { name = "sdbus" },
-    { name = "sdbus-notifications" },
     { name = "xdg-base-dirs" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
-    { name = "dbus-fast" },
     { name = "httpx" },
     { name = "markcom", extra = ["nicegui", "window"] },
     { name = "mypy" },
@@ -1095,6 +1092,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dbus-fast", marker = "extra == 'desktop'", specifier = ">=5.2.0" },
     { name = "desktop-notifier", marker = "extra == 'desktop'", specifier = ">=6.2" },
     { name = "markcom", extras = ["desktop"], marker = "extra == 'window'" },
     { name = "markcom", extras = ["web"], marker = "extra == 'nicegui'" },
@@ -1103,8 +1101,6 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.12" },
     { name = "pyside6-webengine", marker = "extra == 'window'", specifier = ">=6.12" },
     { name = "python-slugify", marker = "extra == 'desktop'", specifier = ">=9.2.0" },
-    { name = "sdbus", marker = "extra == 'desktop'", specifier = ">=0.14.3" },
-    { name = "sdbus-notifications", marker = "extra == 'desktop'", specifier = ">=1.0.3" },
     { name = "starlette", marker = "extra == 'web'", specifier = ">=1.3" },
     { name = "uvicorn", marker = "extra == 'nicegui'", specifier = ">=0.54" },
     { name = "wsproto", marker = "extra == 'nicegui'", specifier = ">=1.3" },
@@ -1115,7 +1111,6 @@ provides-extras = ["desktop", "window", "web", "nicegui"]
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.9" },
-    { name = "dbus-fast", specifier = ">=5.2.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "markcom", extras = ["window", "nicegui"] },
     { name = "mypy", specifier = ">=2.4" },
@@ -2166,29 +2161,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/a5/2e136dede2a88aaaf54498bbbdc81bc810f788ef6ef01efb97037d73cd1d/ruff-0.17.5-py3-none-win32.whl", hash = "sha256:e1546609b2ad73f1d6c5c076881b788672b7b3cc3283981182cbdbb6524ed88a", size = 9929908, upload-time = "2026-11-12T17:54:47.067Z" },
     { url = "https://files.pythonhosted.org/packages/ec/8c/e4db9ae1e0ee233c04df007ab6d0d42f799ae9abd95d352b6092ee7bc4bf/ruff-0.17.5-py3-none-win_amd64.whl", hash = "sha256:aa415d57c244299279901d776607fee3df7831c2a7435433fbfacde8632c6550", size = 10275454, upload-time = "2026-11-12T17:54:49.401Z" },
     { url = "https://files.pythonhosted.org/packages/e6/65/a1648bc1550e7683bf7bf1e2ce2485c9f8535cbca6cca9ec7b73cc12fb8e/ruff-0.17.5-py3-none-win_arm64.whl", hash = "sha256:64a6fd668a336df959c522991de33e9e3c8be463afc0c9ac8f029f9d19ef756e", size = 9849020, upload-time = "2026-11-12T17:54:52.055Z" },
-]
-
-[[package]]
-name = "sdbus"
-version = "0.14.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/69/0e/14b0f16087cf7f1e1817da9282dcb590fe27030c6ba136c3e35dff647f3a/sdbus-0.14.3.tar.gz", hash = "sha256:4ec4fa4108629bae5ab2775e5575b0251fdb555d4a3613c9ddb37fc73f882983", size = 90453, upload-time = "2026-08-20T17:13:31.591Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/2f/cbe92d8b1f648a0a5a065a4f4732d3a0525db2e0a9e59c11b45029815d65/sdbus-0.14.3-cp39-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:4bb2f88f63ba16be9660450f054657391474f37cc3c4085daf421d68601f4bd9", size = 769693, upload-time = "2026-08-20T17:13:49.419Z" },
-    { url = "https://files.pythonhosted.org/packages/c0/d6/8ab1d779991b103dff8ecdb596ae908bdee50644a21177e3acaf56cd02d9/sdbus-0.14.3-cp39-abi3-manylinux_2_28_armv7l.whl", hash = "sha256:2fc4e071098d566b3f2080c9d4bb8be51d6eb213b2d9b445506577f72240787b", size = 698452, upload-time = "2026-08-20T17:13:50.756Z" },
-    { url = "https://files.pythonhosted.org/packages/d5/7a/e0d331eb0894e015930e570e2a381b5afbfd06bff3df586eec89d97f70e1/sdbus-0.14.3-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:37615035d21d29b0fab0dd8c5f86b10f17e84d6126343302f7bf71ef8b0b9c5c", size = 742493, upload-time = "2026-08-20T17:13:52.478Z" },
-]
-
-[[package]]
-name = "sdbus-notifications"
-version = "1.0.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "sdbus" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/71/bb/661c9b503cbe1c25a7f5b1b5aea8006841c927217ca03832b923423a7449/sdbus_notifications-1.0.3.tar.gz", hash = "sha256:92c301b8232832efc50c8c1d8789dedf83ce8fd55c1bc52d2befbeedfedfebc3", size = 18067, upload-time = "2025-01-05T20:37:55.879Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/5d/99f565d8fb27fecdd76752e1151af96ab830a2b7969c18034236d758adb6/sdbus_notifications-1.0.3-py3-none-any.whl", hash = "sha256:4227dd20f78b54b01084982cdcb8ab276b1c63763b61070309a6573db2d05eb5", size = 25505, upload-time = "2025-01-05T20:37:54.315Z" },
 ]
 
 [[package]]
