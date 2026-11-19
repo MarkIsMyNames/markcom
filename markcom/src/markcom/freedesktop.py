@@ -109,20 +109,14 @@ class FreedesktopBackend(NotificationBackend):
 
 
 def find_desktop_entry(desktop_entry: str, data_dirs: Sequence[Path]) -> str:
-    # None: installed in none of the data folders
-    found: Path | None = next(
-        (
-            path
-            for data_dir in data_dirs
-            if (path := data_dir / APPLICATIONS / f"{desktop_entry}{DESKTOP_SUFFIX}").is_file()
-        ),
-        None,
-    )
-    if found is None:
+    if not any(
+        (data_dir / APPLICATIONS / f"{desktop_entry}{DESKTOP_SUFFIX}").is_file()
+        for data_dir in data_dirs
+    ):
         searched: str = ", ".join(str(data_dir / APPLICATIONS) for data_dir in data_dirs)
         missing: str = f"no {desktop_entry}{DESKTOP_SUFFIX} in {searched}"
         raise MissingDesktopEntryError(missing)
-    logger.debug("desktop entry %s found at %s", desktop_entry, found)
+    logger.debug("desktop entry %s is installed", desktop_entry)
     return desktop_entry
 
 
