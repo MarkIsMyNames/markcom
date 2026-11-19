@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import override
 
-from pydantic import HttpUrl
+from pydantic import HttpUrl, TypeAdapter, ValidationError
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWebEngineCore import (
@@ -18,9 +18,19 @@ from PySide6.QtWidgets import QMainWindow, QWidget
 
 from markcom.config import CONFIG
 from markcom.tray import TrayTarget
-from markcom.web_scheme import WebScheme
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+# pydantic's HttpUrl takes http and https links only, so it decides what goes to the browser.
+WEB_LINK: TypeAdapter[HttpUrl] = TypeAdapter(HttpUrl)
+
+
+def _is_web_link(url: QUrl) -> bool:
+    try:
+        WEB_LINK.validate_python(url.toString())
+    except ValidationError:
+        return False
+    return True
 
 
 class _OwnOriginPage(QWebEnginePage):
@@ -51,7 +61,7 @@ class _OwnOriginPage(QWebEnginePage):
     @staticmethod
     def _send_away(url: QUrl) -> None:
         # scheme and host only: URL may carry a token
-        if url.scheme() in WebScheme:
+        if _is_web_link(url):
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
             if not QDesktopServices.openUrl(url):
                 logger.warning(
