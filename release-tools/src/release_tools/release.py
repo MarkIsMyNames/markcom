@@ -25,12 +25,12 @@ class ReleaseError(RuntimeError):
     pass
 
 
-def _read_pulls(text: str) -> dict[str, frozenset[str]]:
+def _read_pulls() -> dict[str, frozenset[str]]:
     """Each merged pull request's labels, by the commit it was merged as."""
     try:
         return {
             pull["mergeCommit"]["oid"]: frozenset(label["name"] for label in pull["labels"])
-            for pull in json.loads(text)
+            for pull in json.loads(os.environ[PULLS_VARIABLE])
             if pull["mergeCommit"] is not None
         }
     except (ValueError, KeyError, TypeError) as failure:
@@ -80,13 +80,13 @@ def _publish(repo: Repo, releases: list[Release]) -> None:
         repo.git.push("--atomic", "origin", "HEAD:main", *tags)
 
 
-def _run(repo: Repo, pulls_json: str) -> None:
+def _run(repo: Repo) -> None:
     # first: an older run, or a re-run, would compare an old commit with newer tags
     repo.remotes.origin.fetch("main")
     if repo.commit("origin/main") != repo.commit("HEAD"):
         say("main moved on; the run for the newer commit releases this")
         return
-    pulls = _read_pulls(pulls_json)
+    pulls = _read_pulls()
     releases = [found for library in LIBRARIES if (found := _decide(repo, library, pulls))]
     if not releases:
         say("nothing to release")
@@ -98,7 +98,7 @@ def _run(repo: Repo, pulls_json: str) -> None:
 
 def main() -> int:
     try:
-        _run(Repo(search_parent_directories=True), os.environ.get(PULLS_VARIABLE, ""))
+        _run(Repo(search_parent_directories=True))
     except (ReleaseError, VersionError, GitCommandError) as failure:
         error(f"release failed: {failure}")
         return 1
