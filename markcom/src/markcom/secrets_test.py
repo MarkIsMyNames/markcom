@@ -72,3 +72,12 @@ def test_a_subclass_env_file_is_taken_relative_to_the_folder_given(setup):
     tool = root / "tool"
     tool.mkdir()
     assert load_secrets(RootDotenvSecrets, tool).api_token.get_secret_value() == "from-root"
+
+
+class ListedDotenvSecrets(ExampleSecrets):
+    model_config = SettingsConfigDict(env_file=[".env", "local.env"])
+
+
+def test_a_list_of_env_files_is_refused(setup):
+    with pytest.raises(TypeError):
+        load_secrets(ListedDotenvSecrets, setup({}, "API_TOKEN=t\nPORT=1\n"))

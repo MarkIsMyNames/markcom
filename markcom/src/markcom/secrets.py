@@ -24,14 +24,14 @@ class BaseSecrets(BaseSettings):
     def load(cls, env_dir: Path) -> Self:
         """Read env_file relative to `env_dir`, not the working directory: an app started from
         the desktop menu runs in the home folder."""
-        # None: the model reads no file
         env_file: DotenvType | None = cls.model_config.get("env_file")
+        # None (NoSecrets): no file to read
         if env_file is None:
-            return cls(_env_file=None)
-        # str and Path first: a str is a Sequence too
-        if isinstance(env_file, str | Path):
-            return cls(_env_file=env_dir / env_file)
-        return cls(_env_file=[env_dir / name for name in env_file])
+            return cls()
+        if not isinstance(env_file, str | Path):
+            several: str = f"{cls.__name__}: env_file must name one file, not {env_file!r}"
+            raise TypeError(several)
+        return cls(_env_file=env_dir / env_file)
 
 
 class NoSecrets(BaseSecrets):
