@@ -61,7 +61,8 @@ class Clone:
         commit, as GitHub checks out a pull request: HEAD^1 is main, HEAD the merge."""
         self.repo.git.switch("-c", "pr")
         change()
-        self.repo.git.commit("-a", "--allow-empty", "-m", "pr")
+        self.repo.git.add("-A")
+        self.repo.git.commit("--allow-empty", "-m", "pr")
         self.repo.git.switch("main")
         self.repo.git.merge("--no-ff", "pr", "-m", "merge")
 

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from release_tools.versions_unchanged import main
@@ -50,3 +52,24 @@ def test_missing_release_config_fails(clone, capsys):
     clone.merge_pr(lambda: clone.repo.git.rm("-q", "release.json"))
     assert main() == 1
     assert "release.json" in capsys.readouterr().out
+
+
+def test_library_new_in_the_pull_request_passes(clone, capsys):
+    def add_library():
+        (clone.path / "newlib").mkdir()
+        clone.write("newlib/package.json", '{"name": "newlib", "version": "0.1.0"}\n')
+        config = json.loads((clone.path / "release.json").read_text(encoding="utf-8"))
+        config["libraries"].append(
+            {
+                "name": "newlib",
+                "kind": "npm",
+                "path": "newlib",
+                "tag_prefix": "newlib-v",
+                "extra_code": [],
+            }
+        )
+        clone.write("release.json", json.dumps(config))
+
+    clone.merge_pr(add_library)
+    assert main() == 0
+    assert "newlib: 0.1.0, new" in capsys.readouterr().out

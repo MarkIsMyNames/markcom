@@ -47,6 +47,14 @@ class Library(ABC):
     def tag(self, version: Version) -> str:
         return f"{self._tag_prefix}{version}"
 
+    def exists_at(self, repo: Repo, revision: str) -> bool:
+        """Whether its manifest is in the repository at a git revision."""
+        try:
+            repo.commit(revision).tree / str(self._folder / self.manifest)
+        except KeyError:
+            return False
+        return True
+
     def version_at(self, repo: Repo, revision: str) -> Version:
         try:
             text = self._version(self._manifest_at(repo, revision))

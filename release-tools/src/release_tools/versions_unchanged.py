@@ -15,8 +15,11 @@ from release_tools.versions import ReleaseLabel
 
 def _check(repo: Repo, library: Library) -> bool:
     try:
-        before = library.version_at(repo, MAIN_BEFORE_MERGE)
         after = library.version_at(repo, HEAD)
+        if not library.exists_at(repo, MAIN_BEFORE_MERGE):
+            say(f"{library.name}: {after}, new")
+            return True
+        before = library.version_at(repo, MAIN_BEFORE_MERGE)
     except VersionError as failure:
         error(str(failure))
         return False
