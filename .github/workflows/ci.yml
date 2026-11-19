@@ -52,54 +52,38 @@ jobs:
         run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
 
   # On every push to main (a merged PR included), releases markcom as the tag
-  # markcom-v<version>, the tag projects install it by and Renovate watches. A version raised
-  # by hand in pyproject.toml is released as it is; otherwise, when the library's source or
-  # pyproject.toml changed since the last release, the next patch version is released. The tag
-  # points at a release commit, made on top of the pushed commit, whose pyproject.toml carries
-  # the released version; sync-versions then commits that version to main.
+  # markcom-v<version>, the tag projects install it by and Renovate watches. It tags the pushed
+  # commit when the version in pyproject.toml is higher than the last tag; version-raised makes
+  # sure every PR that changes what ships raises it.
   release-markcom:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [markcom, markcom-integration]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    # The latest version, released now or before, for sync-versions.
-    outputs:
-      version: ${{ steps.tag.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Every commit and tag, to compare against the last release.
+          # Every tag, to find the last release.
           fetch-depth: 0
       - name: Tag the release
-        id: tag
         run: |
           declared=$(python3 -c 'import tomllib; print(tomllib.load(open("markcom/pyproject.toml", "rb"))["project"]["version"])')
           latest_tag=$(git tag --list 'markcom-v*' --sort=-version:refname | head -n 1)
           latest=${latest_tag#markcom-v}
-          if [ "$declared" != "$latest" ] && [ "$(printf '%s\n%s\n' "$latest" "$declared" | sort -V | tail -n 1)" = "$declared" ]; then
-            version=$declared
-            echo "Releasing ${version}, raised by hand from ${latest}"
-          else
-            # A release commit's parent is the main commit it was made from, so this compares
-            # main then with main now. Tests are left out: they ship in no release. So is the
-            # version line, which sync-versions changes on main after each release.
-            if git diff --quiet -I '^version = ' "${latest_tag}^" HEAD -- markcom/src markcom/pyproject.toml ':(exclude)markcom/src/**/*_test.py'; then
-              echo "markcom is unchanged since ${latest}; nothing to release"
-              echo "version=${latest}" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            IFS=. read -r major minor patch <<< "$latest"
-            version="${major}.${minor}.$((patch + 1))"
-            echo "Releasing ${version}, changed since ${latest}"
+          if [ "$declared" = "$latest" ]; then
+            echo "markcom ${declared} is already released; nothing to release"
+            exit 0
           fi
-          sed -i "s/^version = \"${declared}\"$/version = \"${version}\"/" markcom/pyproject.toml
+          if [ "$(printf '%s\n%s\n' "$latest" "$declared" | sort -V | tail -n 1)" != "$declared" ]; then
+            echo "::error::markcom ${declared} in pyproject.toml is lower than the last release, ${latest}"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit --allow-empty -m "chore(markcom): release ${version}" -- markcom/pyproject.toml
-          git tag -a "markcom-v${version}" -m "markcom ${version}"
-          git push origin "markcom-v${version}"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          git tag -a "markcom-v${declared}" -m "markcom ${declared}"
+          git push origin "markcom-v${declared}"
+          echo "Released markcom ${declared}"
 
   # The TypeScript libraries the react-ui websites install from npm. web-config is built
   # first because markcom-i18n lints itself with it.
@@ -146,12 +130,10 @@ jobs:
         if: matrix.library == 'markcom-i18n'
         run: npm run test:e2e
 
-  # On every push to main (a merged PR included), publishes each web library that changed.
-  # A version raised by hand in package.json (a minor or major release) is published as it is;
-  # otherwise, when the built package differs from the latest on npm, the next patch version
-  # is published. sync-versions then commits the version to main. It signs in to npm by
-  # trusted publishing, set up on each package's npm settings page for this repository and
-  # ci.yml.
+  # On every push to main (a merged PR included), publishes each web library whose version in
+  # package.json is higher than the latest on npm; version-raised makes sure every PR that
+  # changes what ships raises it. It signs in to npm by trusted publishing, set up on each
+  # package's npm settings page for this repository and ci.yml.
   publish-web-libraries:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: web-libraries
@@ -159,10 +141,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    # Each library's latest version, published now or before, for sync-versions.
-    outputs:
-      markcom-web-config: ${{ steps.release.outputs.markcom-web-config }}
-      markcom-i18n: ${{ steps.release.outputs.markcom-i18n }}
     strategy:
       # One library failing to publish must not stop the other.
       fail-fast: false
@@ -184,102 +162,91 @@ jobs:
         run: npm ci
       - name: Build
         run: npm ci && npm run build
-      # No installer reads these, and Renovate bumps them on most merges; packed, they would
-      # make an unchanged library look changed.
-      - name: Drop development-only fields from package.json
-        run: npm pkg delete devDependencies overrides scripts
-      - name: Choose the version to publish
+      - name: Choose whether to publish
         id: release
-        env:
-          LIBRARY: ${{ matrix.library }}
         run: |
           name=$(node -p "require('./package.json').name")
           declared=$(node -p "require('./package.json').version")
           latest=$(npm view "$name" version)
+          if [ "$declared" = "$latest" ]; then
+            echo "${name} ${declared} is already published; nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Prints true when the first version is higher than the second.
           is_higher='const [a, b] = process.argv.slice(1).map((v) => v.split(".").map(Number));
             const i = a.findIndex((part, n) => part !== b[n]);
             console.log(i !== -1 && a[i] > b[i]);'
-          if [ "$(node -e "$is_higher" "$declared" "$latest")" = "true" ]; then
-            echo "Publishing ${name} ${declared}, raised by hand from ${latest}"
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "${LIBRARY}=${declared}" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "$(node -e "$is_higher" "$declared" "$latest")" != "true" ]; then
+            echo "::error::${name} ${declared} in package.json is lower than the latest on npm, ${latest}"
+            exit 1
           fi
-          npm version "$latest" --no-git-tag-version --allow-same-version > /dev/null
-          built=$(npm pack --dry-run --json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8"))[0].shasum')
-          if [ "$built" = "$(npm view "${name}@${latest}" dist.shasum)" ]; then
-            echo "${name} is unchanged since ${latest}; nothing to publish"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "${LIBRARY}=${latest}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          npm version patch --no-git-tag-version > /dev/null
-          version=$(node -p "require('./package.json').version")
-          echo "Publishing ${name} ${version}, changed since ${latest}"
+          echo "Publishing ${name} ${declared}"
           echo "publish=true" >> "$GITHUB_OUTPUT"
-          echo "${LIBRARY}=${version}" >> "$GITHUB_OUTPUT"
       - name: Publish
         if: steps.release.outputs.publish == 'true'
         # npm trusted publishing: npm signs in with this run's OIDC token (id-token: write),
         # so no npm token is stored anywhere.
         run: npm publish --access public --provenance
 
-  # After the releases, commits the released versions to main, so markcom's pyproject.toml and
-  # uv.lock and each library's package.json name the latest release. It never lowers a
-  # version: main may already carry a higher one raised by hand. A push with GITHUB_TOKEN
-  # starts no workflow run, so this commit releases nothing.
-  sync-versions:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [release-markcom, publish-web-libraries]
+  # On every pull request, fails when a library's shipped files changed but its version was not
+  # raised, so every release is a version committed to the repository. Tests, lock files,
+  # devDependencies, overrides, dependency-groups and tool settings ship in no release.
+  version-raised:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    # Runs for pushes close together take turns, so each commits on top of the last.
-    concurrency:
-      group: sync-versions
-      cancel-in-progress: false
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # main as it is now: another push may have landed since this run started.
-          ref: main
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 26
-      - name: Commit the released versions to main
-        env:
-          MARKCOM: ${{ needs.release-markcom.outputs.version }}
-          WEB_CONFIG: ${{ needs.publish-web-libraries.outputs.markcom-web-config }}
-          I18N: ${{ needs.publish-web-libraries.outputs.markcom-i18n }}
+          # The PR's merge commit and its first parent, main as it is now.
+          fetch-depth: 2
+      - name: Require a raised version for every library whose shipped files changed
         run: |
-          # True when the second version is higher than the first.
-          is_raise() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$2" ]; }
-          declared=$(python3 -c 'import tomllib; print(tomllib.load(open("markcom/pyproject.toml", "rb"))["project"]["version"])')
-          if is_raise "$declared" "$MARKCOM"; then
-            sed -i "s/^version = \"${declared}\"$/version = \"${MARKCOM}\"/" markcom/pyproject.toml
-            # sed succeeds when nothing matches; fail rather than leave the old version
-            grep -qx "version = \"${MARKCOM}\"" markcom/pyproject.toml
-            uv lock --directory markcom
-          fi
-          # npm version writes package.json and package-lock.json.
-          sync_library() {
-            declared=$(node -p "require('./$1/package.json').version")
-            if is_raise "$declared" "$2"; then
-              (cd "$1" && npm version "$2" --no-git-tag-version > /dev/null)
+          # The parts of pyproject.toml an install reads, without the version.
+          python_manifest() {
+            git show "$1:markcom/pyproject.toml" | python3 -c '
+          import json, sys, tomllib
+          manifest = tomllib.load(sys.stdin.buffer)
+          del manifest["project"]["version"]
+          print(json.dumps([manifest["project"], manifest["build-system"], manifest["tool"]["hatch"]], sort_keys=True))'
+          }
+          # The parts of package.json an install reads, without the version; the kept scripts
+          # make the tarball. Keys sorted, as npm install re-sorts dependencies.
+          npm_manifest() { git show "$1:$2/package.json" | jq -S 'del(.version, .devDependencies, .overrides) | .scripts |= {build, prepare, prepack, prepublishOnly}'; }
+          python_version() { git show "$1:markcom/pyproject.toml" | python3 -c 'import sys, tomllib; print(tomllib.load(sys.stdin.buffer)["project"]["version"])'; }
+          npm_version() { git show "$1:$2/package.json" | jq -r .version; }
+          # Usage: require_raise <library> <version on main> <version in the PR> <manifest on main> <manifest in the PR> <shipped paths...>
+          require_raise() {
+            library=$1 before=$2 after=$3 manifest_before=$4 manifest_after=$5
+            shift 5
+            # A failed read in a command substitution doesn't stop the script, so check here.
+            if [ -z "$before" ] || [ -z "$after" ] || [ -z "$manifest_before" ] || [ -z "$manifest_after" ]; then
+              echo "::error::${library}: could not read its version or manifest"
+              return 1
+            fi
+            if [ "$manifest_before" = "$manifest_after" ] && git diff --quiet HEAD^1 HEAD -- "$@"; then
+              echo "${library}: nothing shipped changed"
+            elif [ "$before" != "$after" ] && [ "$(printf '%s\n%s\n' "$before" "$after" | sort -V | tail -n 1)" = "$after" ]; then
+              echo "${library}: shipped files changed and the version is raised from ${before} to ${after}"
+            else
+              echo "::error::${library}: shipped files changed but the version is still ${after}; raise it"
+              return 1
             fi
           }
-          sync_library markcom-web-config "$WEB_CONFIG"
-          sync_library markcom-i18n "$I18N"
-          if git diff --quiet; then
-            echo "main already carries the released versions"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore: sync versions with the latest releases"
-          git push origin HEAD:main
+          failed=0
+          require_raise markcom "$(python_version HEAD^1)" "$(python_version HEAD)" \
+            "$(python_manifest HEAD^1)" "$(python_manifest HEAD)" \
+            markcom/src ':(exclude)*_test.py' || failed=1
+          require_raise markcom-web-config "$(npm_version HEAD^1 markcom-web-config)" "$(npm_version HEAD markcom-web-config)" \
+            "$(npm_manifest HEAD^1 markcom-web-config)" "$(npm_manifest HEAD markcom-web-config)" \
+            markcom-web-config/src markcom-web-config/tsconfig.json markcom-web-config/prettier.json || failed=1
+          # i18n's tsconfig.json extends web-config's, so a change there changes i18n's build too.
+          require_raise markcom-i18n "$(npm_version HEAD^1 markcom-i18n)" "$(npm_version HEAD markcom-i18n)" \
+            "$(npm_manifest HEAD^1 markcom-i18n)" "$(npm_manifest HEAD markcom-i18n)" \
+            markcom-i18n/src ':(exclude)*.test.ts' markcom-i18n/tsconfig.json markcom-web-config/tsconfig.json || failed=1
+          exit "$failed"
 
   security:
     uses: ./.github/workflows/security.yml

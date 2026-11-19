@@ -40,12 +40,12 @@ npm install --save-dev @markcom/web-config
 
 ## Releasing
 
-CI does both on every push to `main`:
+CI releases exactly the version committed to the repository, so the two never differ. On every push to `main`:
 
-- **markcom**: a version raised by hand in `markcom/pyproject.toml` (a minor or major release) is tagged `markcom-v<version>` as it is. Otherwise, if the source or `pyproject.toml` changed since the last release, CI tags the next patch version.
-- **npm packages**: a version raised by hand in `package.json` is published as it is. Otherwise a changed package is published as the next patch version. `devDependencies`, `overrides` and `scripts` are dropped from `package.json` before packing, so a change to only those publishes nothing. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
+- **markcom**: when `version` in `markcom/pyproject.toml` is higher than the last `markcom-v*` tag, CI tags the pushed commit `markcom-v<version>`.
+- **npm packages**: when `version` in a `package.json` is higher than the latest on npm, CI publishes it. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
 
-After releasing, CI commits the released versions to `main` (`markcom/pyproject.toml`, `markcom/uv.lock`, each `package.json` and `package-lock.json`), so the repository always names the latest release. It never lowers a version raised by hand.
+A pull request that changes a library's shipped files must raise that library's version; the `version-raised` check fails otherwise. Shipped files are the library's source (tests excluded), `tsconfig.json` and `prettier.json` for the npm packages (`markcom-i18n`'s tsconfig extends `markcom-web-config`'s), and the parts of `pyproject.toml` or `package.json` an install reads. Tests, lock files, `devDependencies` (build tools included), `overrides`, `dependency-groups` and tool settings need no raise. After raising `markcom`'s version, run `uv lock`; after raising an npm package's, run `npm version <version> --no-git-tag-version` so `package-lock.json` matches.
 
 ## Checks
 
