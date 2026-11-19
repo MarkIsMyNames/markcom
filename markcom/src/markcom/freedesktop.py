@@ -39,6 +39,8 @@ URGENCY_HINT: str = "urgency"
 # D-Bus type codes of the two hints
 STRING_TYPE: str = "s"
 BYTE_TYPE: str = "y"
+# libdbus's and sd-bus's default wait for a reply; dbus-fast has none of its own.
+REPLY_TIMEOUT_SEC: float = 25
 # What a failed connection or call raises; EOFError when the bus hangs up mid-call.
 DBUS_ERRORS: tuple[type[Exception], ...] = (DBusFastError, EOFError)
 # A malformed or non-UTF-8 existing .desktop file is left as it is: it may be another app's.
@@ -234,6 +236,4 @@ def open_backend(app_name: str, icon: Path, desktop_entry: str | None) -> Notifi
         else find_desktop_entry(desktop_entry, [xdg_data_home(), *xdg_data_dirs()])
     )
     logger.info("notifications name the desktop entry %s", entry)
-    return FreedesktopBackend(
-        app_name, icon, entry, SessionBus(CONFIG.notification_reply_timeout_sec)
-    )
+    return FreedesktopBackend(app_name, icon, entry, SessionBus(REPLY_TIMEOUT_SEC))
