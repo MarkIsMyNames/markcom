@@ -1,7 +1,7 @@
 import en from '../e2e/site/locales/en.json' with { type: 'json' };
 import ga from '../e2e/site/locales/ga.json' with { type: 'json' };
 import { locales } from '../e2e/site/locales.ts';
-import { leafKeys, lookupString } from './locales.ts';
+import { flattenLocale, leafKeys, lookupString } from './locales.ts';
 
 describe('lookupString and leafKeys', () => {
   it('read strings by dotted key', () => {
@@ -16,6 +16,20 @@ describe('lookupString and leafKeys', () => {
 
   it.each(['page.missing', 'page'])('lookupString throws for %s', (key) => {
     expect(() => lookupString(en, key)).toThrow(Error);
+  });
+});
+
+describe('flattenLocale', () => {
+  it('keys every string by its dotted path, at any depth', () => {
+    expect([...flattenLocale({ a: 'x', b: { c: 'y', d: { e: 'z' } } })]).toEqual([
+      ['a', 'x'],
+      ['b.c', 'y'],
+      ['b.d.e', 'z'],
+    ]);
+  });
+
+  it('leaves out an empty record', () => {
+    expect([...flattenLocale({ a: {}, b: 'x' })]).toEqual([['b', 'x']]);
   });
 });
 

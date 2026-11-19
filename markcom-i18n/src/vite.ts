@@ -1,8 +1,13 @@
 import { checkInvalidTranslations, checkMissingTranslations } from '@lingual/i18n-check';
-import escapeHtml from 'escape-html';
-import { flatten } from 'flat';
+import { escape as escapeHtml } from 'es-toolkit';
 import type { IndexHtmlTransformContext, Plugin } from 'vite';
-import { leafKeys, lookupString, type LocaleRecord, type LocaleSet } from './locales.js';
+import {
+  flattenLocale,
+  leafKeys,
+  lookupString,
+  type LocaleRecord,
+  type LocaleSet,
+} from './locales.js';
 
 /** index.html placeholders filled by localeHtmlPlugin. */
 const HTML_PLACEHOLDER: RegExp = /\{\{[\w:.]+\}\}/g;
@@ -18,7 +23,7 @@ const ALLOWED_META_CONTENT: ReadonlySet<string> = new Set(['width=device-width, 
 
 /** i18n-check compares flat files: one dotted key per string. */
 function flat(locale: LocaleRecord): Record<string, string> {
-  return flatten<LocaleRecord, Record<string, string>>(locale);
+  return Object.fromEntries(flattenLocale(locale));
 }
 
 function withoutPlaceholders(text: string): string {
