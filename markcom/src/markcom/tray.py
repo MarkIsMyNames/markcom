@@ -5,7 +5,7 @@ them, count as unread, shown as a badge on the icon, until the next left click."
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
@@ -25,8 +25,7 @@ from markcom.notifier import logger as notifier_logger
 logger: logging.Logger = logging.getLogger(__name__)
 
 # What a menu action may fail with (files: OSError, ValueError; browser: OSError; desktop:
-# RuntimeError). They are logged so the tray keeps running; anything else is a bug, logged with
-# its stack by _log_bug.
+# RuntimeError). They are logged so the tray keeps running; anything else is a bug, logged too.
 ACTION_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, RuntimeError)
 # What turning a log record into a notification may fail with: a malformed log call (TypeError,
 # ValueError, KeyError) or a Qt object already deleted (RuntimeError).
@@ -125,14 +124,11 @@ def _run_logged(action: TrayAction) -> None:
     except ACTION_ERRORS:
         logger.exception("tray action %r failed", action.label)
         return
+    except Exception:
+        # the worker would keep it in a Future nothing reads, so it would vanish
+        logger.exception("bug in tray action %r", action.label)
+        return
     logger.info("tray action %r finished", action.label)
-
-
-def _log_bug(label: str, done: Future[None]) -> None:
-    # None: the action returned, or failed with one of ACTION_ERRORS, already logged
-    error: BaseException | None = done.exception()
-    if error is not None:
-        logger.error("bug in tray action %r", label, exc_info=error)
 
 
 class Tray(AbstractContextManager["Tray"]):
@@ -209,7 +205,7 @@ class Tray(AbstractContextManager["Tray"]):
 
     def _submit(self, action: TrayAction) -> None:
         logger.debug("tray action %r queued", action.label)
-        self._worker.submit(_run_logged, action).add_done_callback(partial(_log_bug, action.label))
+        self._worker.submit(_run_logged, action)
 
     @override
     def __enter__(self) -> Self:
