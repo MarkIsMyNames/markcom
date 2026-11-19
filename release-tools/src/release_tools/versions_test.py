@@ -1,5 +1,6 @@
 import pytest
 
+from release_tools.config import Labels
 from release_tools.versions import BumpLevel, InvalidVersionError, Version, bump_level
 
 
@@ -40,4 +41,4 @@ def test_bumps_by_level(level, expected):
     ],
 )
 def test_bump_level_comes_from_labels(labels, expected):
-    assert bump_level(labels) == expected
+    assert bump_level(labels, Labels(minor="release:minor", major="release:major")) == expected

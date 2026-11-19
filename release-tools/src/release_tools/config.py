@@ -1,24 +1,34 @@
-"""release.json, at the root of the repository being released: the libraries in it."""
+"""release-tools' own settings (config.json beside this file), and the library list of the
+repository being released (release.json at its root)."""
 
 from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from markcom.config import BaseAppConfig, StrictModel, load_config
 
-from release_tools.constants import ENCODING
-
-RELEASE_CONFIG = "release.json"
+CONFIG_PATH = Path(__file__).with_name("config.json")
 
 
-class ConfigError(ValueError):
-    """release.json is missing or invalid; the message names the file."""
+class Labels(StrictModel):
+    """Pull request labels that ask for more than a patch."""
+
+    minor: str
+    major: str
 
 
-class StrictModel(BaseModel):
-    """Every field required, unknown keys rejected, immutable."""
+class Bot(StrictModel):
+    """Who release commits and tags are made as."""
 
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
+    name: str
+    email: str
+
+
+class ToolConfig(BaseAppConfig):
+    # the file, at the repository root, that lists its libraries
+    release_config: str
+    labels: Labels
+    release_commit_prefix: str
+    bot: Bot
 
 
 class LibraryKind(StrEnum):
@@ -42,13 +52,6 @@ class ReleaseConfig(StrictModel):
     libraries: tuple[LibraryConfig, ...]
 
 
-def load_release_config(root: Path) -> ReleaseConfig:
-    path = root / RELEASE_CONFIG
-    try:
-        return ReleaseConfig.model_validate_json(path.read_text(encoding=ENCODING))
-    except FileNotFoundError as error:
-        message = f"{RELEASE_CONFIG}: file not found at the repository root"
-        raise ConfigError(message) from error
-    except ValidationError as error:
-        message = f"{RELEASE_CONFIG}: {error}"
-        raise ConfigError(message) from error
+def load_release_config(root: Path, file_name: str) -> ReleaseConfig:
+    """Raises markcom's ConfigError, naming the file, when it is missing or invalid."""
+    return load_config(root / file_name, ReleaseConfig)

@@ -67,6 +67,7 @@ def test_first_run_tags_untagged_libraries_at_their_declared_versions(clone):
 
 def _outside_the_code(clone):
     clone.append("markcom/src/markcom/runner_test.py", "\n# x\n")
+    clone.write("markcom/src/markcom/conftest.py", "# shared test fixtures\n")
     clone.append("markcom-i18n/src/vite.test.ts", "// x\n")
     clone.edit_json("markcom-i18n/tsconfig.json", lambda data: data.update(compileOnSave=False))
 

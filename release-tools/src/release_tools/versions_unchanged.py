@@ -5,15 +5,16 @@ commit, whose first parent is main."""
 from pathlib import Path
 
 from git import Repo
+from markcom import NoSecrets, run
+from markcom.config import ConfigError
 
-from release_tools.config import ConfigError
+from release_tools.config import CONFIG_PATH, Labels, ToolConfig
 from release_tools.constants import HEAD, MAIN_BEFORE_MERGE
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
-from release_tools.versions import ReleaseLabel
 
 
-def _check(repo: Repo, library: Library) -> bool:
+def _check(repo: Repo, library: Library, labels: Labels) -> bool:
     try:
         after = library.version_at(repo, HEAD)
         if not library.exists_at(repo, MAIN_BEFORE_MERGE):
@@ -26,20 +27,26 @@ def _check(repo: Repo, library: Library) -> bool:
     if after != before:
         error(
             f"{library.name}: version changed from {before} to {after}; CI sets versions, so "
-            f"leave the version files alone and label the pull request {ReleaseLabel.MINOR} or "
-            f"{ReleaseLabel.MAJOR} for a bigger bump than a patch"
+            f"leave the version files alone and label the pull request {labels.minor} or "
+            f"{labels.major} for a bigger bump than a patch"
         )
         return False
     say(f"{library.name}: {after}, unchanged")
     return True
 
 
-def main() -> int:
+def _check_all(config: ToolConfig, _secrets: NoSecrets) -> bool:
     repo = Repo(search_parent_directories=True)
+    libraries = load_libraries(Path(repo.working_dir), config.release_config)
+    # every library is checked and reported, not just those up to the first failure
+    results = [_check(repo, library, config.labels) for library in libraries]
+    return all(results)
+
+
+def main() -> int:
     try:
-        libraries = load_libraries(Path(repo.working_dir))
+        unchanged = run(_check_all, CONFIG_PATH, ToolConfig, NoSecrets)
     except ConfigError as failure:
         error(str(failure))
         return 1
-    results = [_check(repo, library) for library in libraries]
-    return 0 if all(results) else 1
+    return 0 if unchanged else 1

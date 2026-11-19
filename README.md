@@ -46,7 +46,7 @@ CI releases every library `release.json` lists, each on its own, and is the only
 2. CI commits that version to `main` as `chore(release): <library> <version>, …`, in the library's `pyproject.toml` and `uv.lock`, or its `package.json` and `package-lock.json`.
 3. CI tags that commit with the library's tag prefix (`markcom-v…`, `markcom-web-config-v…`, `markcom-i18n-v…`, `release-tools-v…`), creates a GitHub release, and publishes each npm package from its tag. Projects install `markcom` by its tag.
 
-A library's code is its `src` folder (tests excluded), its manifest (`pyproject.toml` or `package.json`, any change) and the files `release.json` lists as `extra_code`: web-config's `tsconfig.json` and `prettier.json`, which projects extend directly. Tests, lock files and build settings such as i18n's `tsconfig.json` release nothing.
+A library's code is its `src` folder (tests and `conftest.py` excluded), its manifest (`pyproject.toml` or `package.json`, any change) and the files `release.json` lists as `extra_code`: web-config's `tsconfig.json` and `prettier.json`, which projects extend directly. Tests, lock files and build settings such as i18n's `tsconfig.json` release nothing.
 
 Never edit a version, run `npm publish` or push a release tag by hand: the `versions-unchanged` check fails a pull request that changes a version. The release job fails if `main` has moved past the commit it runs for; the run for the newest commit releases instead. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
 
