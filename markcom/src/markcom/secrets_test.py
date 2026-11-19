@@ -1,5 +1,6 @@
 import pytest
 from pydantic import SecretStr
+from pydantic_settings import SettingsConfigDict
 
 from markcom.config import ConfigError
 from markcom.secrets import BaseSecrets, NoSecrets, load_secrets
@@ -58,3 +59,16 @@ def test_rejects_bad_secrets(setup, model, environ, dotenv, match):
 @pytest.mark.parametrize("dotenv", [None, "SOMEONE_ELSES=x\n"])
 def test_no_secrets_needs_no_variables_and_ignores_dotenv(setup, dotenv):
     assert load_secrets(NoSecrets, setup({}, dotenv)) == NoSecrets()
+
+
+class RootDotenvSecrets(ExampleSecrets):
+    """A tool in a subfolder sharing the repository root's .env."""
+
+    model_config = SettingsConfigDict(env_file="../.env")
+
+
+def test_a_subclass_env_file_is_taken_relative_to_the_folder_given(setup):
+    root = setup({}, "API_TOKEN=from-root\nPORT=8080\n")
+    tool = root / "tool"
+    tool.mkdir()
+    assert load_secrets(RootDotenvSecrets, tool).api_token.get_secret_value() == "from-root"
