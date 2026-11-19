@@ -6,22 +6,19 @@ export type LocaleRecord = { readonly [key: string]: LocaleValue };
 
 /** Joins a key to the path of the record it sits in. */
 const KEY_SEPARATOR: string = '.';
-/** The top-level record's keys have no prefix. */
-const ROOT_KEY_PREFIX: string = '';
-
-/** Every string in `record`, at any depth, as a [`keyPrefix` + dotted key, string] entry. */
-function collectStringEntries(record: LocaleRecord, keyPrefix: string): [string, string][] {
-  return Object.entries(record).flatMap(
-    ([key, value]: [string, LocaleValue]): [string, string][] =>
-      typeof value === 'string' ?
-        [[`${keyPrefix}${key}`, value]]
-      : collectStringEntries(value, `${keyPrefix}${key}${KEY_SEPARATOR}`),
-  );
-}
 
 /** Every dotted key path that ends in a string, with its string. */
 export function flattenLocale(locale: LocaleRecord): ReadonlyMap<string, string> {
-  return new Map(collectStringEntries(locale, ROOT_KEY_PREFIX));
+  return new Map(
+    Object.entries(locale).flatMap(([key, value]: [string, LocaleValue]): [string, string][] =>
+      typeof value === 'string' ?
+        [[key, value]]
+      : [...flattenLocale(value)].map(([path, text]: [string, string]): [string, string] => [
+          `${key}${KEY_SEPARATOR}${path}`,
+          text,
+        ]),
+    ),
+  );
 }
 
 /** The string at a dotted key path; throws if missing or not a string. */
