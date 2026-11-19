@@ -1,9 +1,8 @@
 import json
 import tomllib
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from pathlib import Path
-from typing import override
+from typing import cast, override
 
 import tomlkit
 from git import GitCommandError, Repo
@@ -81,14 +80,6 @@ class Library(ABC):
         """The parts of the manifest an install reads, without the version."""
 
 
-def _table(container: tomlkit.TOMLDocument | Table, key: str) -> Table:
-    item = container[key]
-    if not isinstance(item, Table):
-        message = f"[{key}] is not a TOML table"
-        raise TypeError(message)
-    return item
-
-
 class PythonLibrary(Library):
     @property
     @override
@@ -109,24 +100,24 @@ class PythonLibrary(Library):
     def write_version(self, root: Path, version: Version) -> None:
         pyproject_path = root / self._manifest_file
         pyproject = tomlkit.parse(pyproject_path.read_text(encoding="utf-8"))
-        _table(pyproject, "project")["version"] = str(version)
+        cast("Table", pyproject["project"])["version"] = str(version)
         pyproject_path.write_text(tomlkit.dumps(pyproject), encoding="utf-8")
         lock_path = root / self.name / "uv.lock"
         lock = tomlkit.parse(lock_path.read_text(encoding="utf-8"))
-        packages = lock["package"]
-        if not isinstance(packages, AoT):
-            message = f"{lock_path} has no [[package]] tables"
-            raise TypeError(message)
-        for package in packages:
+        for package in cast("AoT", lock["package"]):
             if package["name"] == self.name:
                 package["version"] = str(version)
         lock_path.write_text(tomlkit.dumps(lock), encoding="utf-8")
 
 
-def _rewrite_json(path: Path, change: Callable[[dict[str, Json]], None]) -> None:
-    """Edits a JSON file, keeping npm's formatting: two-space indent, final newline."""
+def _set_json(path: Path, value: str, *keys: tuple[str, ...]) -> None:
+    """Sets each nested key to `value`, keeping npm's two-space indent and final newline."""
     data = json.loads(path.read_text(encoding="utf-8"))
-    change(data)
+    for *parents, last in keys:
+        target = data
+        for parent in parents:
+            target = target[parent]
+        target[last] = value
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
@@ -154,18 +145,13 @@ class NpmLibrary(Library):
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
-        text = str(version)
-
-        def set_lock(lock: dict[str, Json]) -> None:
-            lock["version"] = text
-            packages = lock["packages"]
-            if not isinstance(packages, dict) or not isinstance(packages[""], dict):
-                message = f"{self.name}'s package-lock.json has no root package entry"
-                raise TypeError(message)
-            packages[""]["version"] = text
-
-        _rewrite_json(root / self._manifest_file, lambda manifest: manifest.update(version=text))
-        _rewrite_json(root / self.name / "package-lock.json", set_lock)
+        _set_json(root / self._manifest_file, str(version), ("version",))
+        _set_json(
+            root / self.name / "package-lock.json",
+            str(version),
+            ("version",),
+            ("packages", "", "version"),
+        )
 
 
 LIBRARIES: tuple[Library, ...] = (

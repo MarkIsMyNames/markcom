@@ -66,12 +66,6 @@ class Clone:
         with (self.path / relative).open("a", encoding="utf-8") as file:
             file.write(text)
 
-    def replace(self, relative: str, old: str, new: str) -> None:
-        path = self.path / relative
-        text = path.read_text(encoding="utf-8")
-        assert old in text, f"{old!r} not in {relative}"
-        path.write_text(text.replace(old, new, 1), encoding="utf-8")
-
     def write(self, relative: str, text: str) -> None:
         (self.path / relative).write_text(text, encoding="utf-8")
 
