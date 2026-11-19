@@ -31,7 +31,7 @@ class BaseSecrets(BaseSettings):
         if env_file is None:
             return cls()
         if not isinstance(env_file, str | Path):
-            several: str = f"{cls.__name__}: env_file must name one file, not {env_file!r}"
+            several: str = f"{cls.__name__}: env_file must name one file, not {env_file}"
             raise TypeError(several)
         return cls(_env_file=env_dir / env_file)
 
