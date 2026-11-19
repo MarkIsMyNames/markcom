@@ -11,7 +11,4 @@ PUSH_HEAD_TO_MAIN = f"{HEAD}:{MAIN}"
 # a pull request merge commit's first parent: main as the pull request found it
 MAIN_BEFORE_MERGE = f"{HEAD}^1"
 
-# a tag is <library><TAG_SEPARATOR><version>, as markcom-v0.4.1
-TAG_SEPARATOR = "-v"
-
 VERSION_KEY = "version"

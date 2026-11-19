@@ -78,21 +78,13 @@ jobs:
       - name: Tests with coverage gate
         run: uv run pytest -q
 
-  # On every pull request, fails when it changes a library's version: CI writes every version
-  # when it releases, sized by the pull request's release:minor or release:major label.
+  # On every pull request, fails when it changes a library's version: the release writes every
+  # version.
   versions-unchanged:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/versions-unchanged.yml
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # The pull request's merge commit and its first parent, main as it is now.
-          fetch-depth: 2
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Fail on a changed version
-        run: uv run --locked --project release-tools versions-unchanged
 
   # The TypeScript libraries the react-ui websites install from npm. web-config is built
   # first because markcom-i18n lints itself with it.
@@ -139,37 +131,18 @@ jobs:
         if: matrix.library == 'markcom-i18n'
         run: npm run test:e2e
 
-  # On every push to main (a merged PR included), releases each library whose code or manifest
-  # changed since its latest tag: the tag's next version, sized by the merged PR's
+  # On every push to main (a merged PR included), releases each library release.json lists whose
+  # code changed since its latest tag: the tag's next version, sized by the merged PR's
   # release:minor or release:major label (a patch without one), is committed to main and tagged
-  # <library>-v<version>. markcom's tag is what projects install it by and Renovate watches. The
-  # job fails if main has moved past its commit; the run for the newest commit releases.
+  # <library>-v<version>, with a GitHub release. markcom's tag is what projects install it by and
+  # Renovate watches. It fails if main has moved past its commit; the newest commit's run releases.
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [markcom, markcom-integration, web-libraries, release-tools]
-    runs-on: ubuntu-latest
-    concurrency:
-      group: release
-      cancel-in-progress: false
+    uses: ./.github/workflows/release.yml
     permissions:
       contents: write
       pull-requests: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # Every commit and tag, to compare against each library's last release.
-          fetch-depth: 0
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # The labels of the pull request merged as this commit; none for a direct push.
-          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" |
-            jq -r --arg sha "$GITHUB_SHA" '.[] | select(.merge_commit_sha == $sha) | .labels[].name')
-          export RELEASE_LABELS
-          uv run --locked --project release-tools release
 
   # After the release job, publishes each web library's latest tag when npm doesn't have that
   # version yet, so a publish that failed is retried by the next run. It signs in to npm by

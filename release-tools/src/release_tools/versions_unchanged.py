@@ -2,10 +2,13 @@
 version when it releases, sized by the pull request's labels. Run at GitHub's pull request merge
 commit, whose first parent is main."""
 
+from pathlib import Path
+
 from git import Repo
 
+from release_tools.config import ConfigError
 from release_tools.constants import HEAD, MAIN_BEFORE_MERGE
-from release_tools.libraries import LIBRARIES, Library, VersionError
+from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
 from release_tools.versions import ReleaseLabel
 
@@ -30,5 +33,10 @@ def _check(repo: Repo, library: Library) -> bool:
 
 def main() -> int:
     repo = Repo(search_parent_directories=True)
-    results = [_check(repo, library) for library in LIBRARIES]
+    try:
+        libraries = load_libraries(Path(repo.working_dir))
+    except ConfigError as failure:
+        error(str(failure))
+        return 1
+    results = [_check(repo, library) for library in libraries]
     return 0 if all(results) else 1

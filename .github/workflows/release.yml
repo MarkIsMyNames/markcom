@@ -1,0 +1,68 @@
+# Releases the libraries a repository's release.json lists, using release-tools from the same
+# markcom commit as this workflow. A repository calls it once its checks pass, pinned like the
+# security workflow:
+#
+#   release:
+#     needs: [<check jobs>]
+#     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#     uses: MarkIsMyNames/markcom/.github/workflows/release.yml@<commit sha> # release-tools-v<version>
+#     permissions:
+#       contents: write
+#       pull-requests: read
+#
+# Its `tags` output lists the tags it released, for jobs that publish or deploy them.
+name: Release
+
+on:
+  workflow_call:
+    outputs:
+      tags:
+        description: The tags released, space-separated; empty when nothing was released.
+        value: ${{ jobs.release.outputs.tags }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Runs take turns, so each starts from the last one's tags.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      tags: ${{ steps.release.outputs.tags }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Every commit and tag, to compare against each library's latest release.
+          fetch-depth: 0
+      # release-tools from the markcom commit this workflow came from; left untracked, so the
+      # release commit never includes it
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-tools
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The labels of the pull request merged as this commit; none for a direct push.
+          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" |
+            jq -r --arg sha "$GITHUB_SHA" '.[] | select(.merge_commit_sha == $sha) | .labels[].name')
+          export RELEASE_LABELS
+          uv run --locked --project .release-tools/release-tools release
+      - name: Create a GitHub release for each tag
+        if: steps.release.outputs.tags != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ steps.release.outputs.tags }}
+        run: |
+          for tag in $TAGS; do
+            gh release create "$tag" --verify-tag --generate-notes
+          done

@@ -8,6 +8,32 @@ from git import Repo
 # release-tools/src/release_tools/conftest.py -> the repository root
 ROOT = Path(__file__).resolve().parents[3]
 
+MARKCOM_LIBRARIES = {
+    "libraries": [
+        {
+            "name": "markcom",
+            "kind": "uv",
+            "path": "markcom",
+            "tag_prefix": "markcom-v",
+            "extra_code": [],
+        },
+        {
+            "name": "markcom-web-config",
+            "kind": "npm",
+            "path": "markcom-web-config",
+            "tag_prefix": "markcom-web-config-v",
+            "extra_code": ["tsconfig.json", "prettier.json"],
+        },
+        {
+            "name": "markcom-i18n",
+            "kind": "npm",
+            "path": "markcom-i18n",
+            "tag_prefix": "markcom-i18n-v",
+            "extra_code": [],
+        },
+    ]
+}
+
 
 class Clone:
     """A throwaway clone of this repository's HEAD. Its origin is a bare repository holding that
@@ -24,6 +50,11 @@ class Clone:
             config.set_value("user", "name", "test")
             config.set_value("user", "email", "test@example.com")
         self.path = Path(self.repo.working_dir)
+        # the tests' own library list, so they never depend on the repository's release.json
+        self.write("release.json", json.dumps(MARKCOM_LIBRARIES, indent=2) + "\n")
+        self.repo.git.add("release.json")
+        self.repo.git.commit("-m", "release config")
+        self.repo.git.push("origin", "HEAD:main")
 
     def merge_pr(self, change: Callable[[], None]) -> None:
         """Commits what `change` does on a branch from HEAD, then merges it into HEAD with a merge
@@ -102,3 +133,41 @@ def clone(tmp_path, monkeypatch):
     made = Clone(tmp_path)
     monkeypatch.chdir(made.path)
     return made
+
+
+UV_LOCK = """version = 1
+revision = 3
+requires-python = ">=3.13"
+
+[[package]]
+name = "sample"
+version = "0.1.0"
+source = { editable = "." }
+"""
+
+
+@pytest.fixture
+def root_project(tmp_path, monkeypatch):
+    """A one-package uv project at its repository's root, tagged v<version>, as the template's."""
+    origin = Repo.init(tmp_path / "origin.git", bare=True, initial_branch="main")
+    repo = Repo.init(tmp_path / "work", initial_branch="main")
+    with repo.config_writer() as config:
+        config.set_value("user", "name", "test")
+        config.set_value("user", "email", "test@example.com")
+    path = Path(repo.working_dir)
+    (path / "src" / "sample").mkdir(parents=True)
+    (path / "src" / "sample" / "__init__.py").write_text("x = 1\n", encoding="utf-8")
+    (path / "pyproject.toml").write_text(
+        '[project]\nname = "sample"\nversion = "0.1.0"\nrequires-python = ">=3.13"\n',
+        encoding="utf-8",
+    )
+    (path / "uv.lock").write_text(UV_LOCK, encoding="utf-8")
+    library = {"name": "sample", "kind": "uv", "path": ".", "tag_prefix": "v", "extra_code": []}
+    (path / "release.json").write_text(json.dumps({"libraries": [library]}), encoding="utf-8")
+    repo.git.add("-A")
+    repo.git.commit("-m", "init")
+    repo.create_remote("origin", origin.working_dir)
+    repo.git.push("origin", "HEAD:main")
+    monkeypatch.chdir(path)
+    monkeypatch.setenv("RELEASE_LABELS", "")
+    return repo, origin

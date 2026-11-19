@@ -1,0 +1,32 @@
+{
+  "libraries": [
+    {
+      "name": "markcom",
+      "kind": "uv",
+      "path": "markcom",
+      "tag_prefix": "markcom-v",
+      "extra_code": []
+    },
+    {
+      "name": "markcom-web-config",
+      "kind": "npm",
+      "path": "markcom-web-config",
+      "tag_prefix": "markcom-web-config-v",
+      "extra_code": ["tsconfig.json", "prettier.json"]
+    },
+    {
+      "name": "markcom-i18n",
+      "kind": "npm",
+      "path": "markcom-i18n",
+      "tag_prefix": "markcom-i18n-v",
+      "extra_code": []
+    },
+    {
+      "name": "release-tools",
+      "kind": "uv",
+      "path": "release-tools",
+      "tag_prefix": "release-tools-v",
+      "extra_code": []
+    }
+  ]
+}

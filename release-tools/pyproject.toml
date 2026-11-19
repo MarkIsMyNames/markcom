@@ -5,6 +5,7 @@ description = "CI's release scripts for this repository's libraries: the version
 requires-python = ">=3.13"
 dependencies = [
     "gitpython>=3.2.1",
+    "pydantic>=2.14",
     "tomlkit>=0.15.2",
 ]
 

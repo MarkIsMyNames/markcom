@@ -44,3 +44,9 @@ def test_every_library_is_reported(clone, capsys):
     out = capsys.readouterr().out
     assert "markcom: version changed" in out
     assert "markcom-i18n: version changed" in out
+
+
+def test_missing_release_config_fails(clone, capsys):
+    clone.merge_pr(lambda: clone.repo.git.rm("-q", "release.json"))
+    assert main() == 1
+    assert "release.json" in capsys.readouterr().out

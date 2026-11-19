@@ -13,7 +13,7 @@ Always reply in caveman mode (the `caveman` skill), from the first reply to the 
 | `markcom/` | Python library (uv), installed by git tag | `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src`, `uv run bandit -q -r src -x '*_test.py'`, `uv run pip-audit --skip-editable`, `uv run pytest -q` |
 | `markcom-web-config/` | npm: shared ESLint, Prettier, TypeScript and Vitest settings | `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run build`, `npm run audit` |
 | `markcom-i18n/` | npm: locales, i18next and routing | as web-config, plus `npm test` and `npm run test:e2e`; build web-config first (`npm ci && npm run build` there), as i18n lints with it |
-| `release-tools/` | Python (uv): CI's release scripts | as markcom, with `uv run bandit -q -r src -c pyproject.toml` |
+| `release-tools/` | Python (uv): the release tool, shared with other repositories through `.github/workflows/release.yml` | as markcom, with `uv run bandit -q -r src -c pyproject.toml` |
 
 - Tests sit beside the code: `*_test.py`, `*.test.ts`. Never suppress a lint, type or scanner finding inline; fix it.
 - After changing a `pyproject.toml`'s dependencies, run `uv lock`: CI installs with `--locked`.
@@ -22,9 +22,9 @@ Always reply in caveman mode (the `caveman` skill), from the first reply to the 
 
 ## Releasing
 
-CI releases each library and is the only thing that changes a version; README.md's Releasing section has the full rules.
+CI releases each library `release.json` lists (`release-tools` included) and is the only thing that changes a version; README.md's Releasing section has the full rules.
 
 - Never change a library's version: `version` in `markcom/pyproject.toml`, `markcom/uv.lock`, a `package.json` or a `package-lock.json`. The `versions-unchanged` check fails a pull request that does.
 - A change to a library's code (`src`, tests excluded) or its `pyproject.toml` or `package.json` is released as the next patch. For a minor or major release, ask the owner to label the pull request `release:minor` or `release:major`; below 1.0, a breaking change takes `release:minor`, as `release:major` gives 1.0.0. Tests, lock files and build settings release nothing.
 - Never run `npm publish`, push a `markcom-*` tag or push a version commit to `main`. `chore(release): …` commits on `main` come from CI; pull before branching.
-- Change `release-tools/` test first: its tests run the tools against throwaway clones of this repository.
+- Change `release-tools/` test first: its tests run the tools against throwaway clones of this repository. Other repositories call its shared workflows, `.github/workflows/release.yml` and `versions-unchanged.yml`, so keep them working for a `release.json` other than this one.

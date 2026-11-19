@@ -1,14 +1,15 @@
 import json
 import tomllib
 from abc import ABC, abstractmethod
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import ClassVar, cast, override
 
 import tomlkit
 from git import GitCommandError, Repo
 from tomlkit.items import AoT, Table
 
-from release_tools.constants import ENCODING, TAG_SEPARATOR, VERSION_KEY
+from release_tools.config import LibraryConfig, LibraryKind, load_release_config
+from release_tools.constants import ENCODING, VERSION_KEY
 from release_tools.versions import InvalidVersionError, Version
 
 CODE_FOLDER = "src"
@@ -26,23 +27,25 @@ class VersionError(ValueError):
 
 
 class Library(ABC):
-    """One library this repository releases, in the folder named after it. A release follows a
-    change to its code: its `src` folder, any `extra_code` files and its manifest, tests
-    excluded."""
+    """One library release.json lists. A release follows a change to its code: its `src` folder,
+    its manifest and any `extra_code` files, tests excluded."""
 
     manifest: ClassVar[str]
     tests: ClassVar[str]
 
-    def __init__(self, name: str, extra_code: tuple[str, ...] = ()) -> None:
-        self.name = name
+    def __init__(self, config: LibraryConfig) -> None:
+        self.name = config.name
+        self._folder = PurePosixPath(config.path)
+        self._tag_prefix = config.tag_prefix
         # git pathspecs from the repository root; an exclude pattern's * also matches /
+        code = (CODE_FOLDER, self.manifest, *config.extra_code)
         self._code = (
-            *(f"{name}/{path}" for path in (CODE_FOLDER, self.manifest, *extra_code)),
-            f":(exclude){name}/{self.tests}",
+            *(str(self._folder / path) for path in code),
+            f":(exclude){self._folder / self.tests}",
         )
 
     def tag(self, version: Version) -> str:
-        return f"{self.name}{TAG_SEPARATOR}{version}"
+        return f"{self._tag_prefix}{version}"
 
     def version_at(self, repo: Repo, revision: str) -> Version:
         try:
@@ -58,7 +61,7 @@ class Library(ABC):
 
     def latest_release(self, repo: Repo) -> Version | None:
         """The highest version tagged, or None before its first release."""
-        prefix = f"{self.name}{TAG_SEPARATOR}"
+        prefix = self._tag_prefix
         tags = [tag.name for tag in repo.tags if tag.name.startswith(prefix)]
         return max((Version.parse(tag.removeprefix(prefix)) for tag in tags), default=None)
 
@@ -66,7 +69,7 @@ class Library(ABC):
         return bool(repo.git.diff("--name-only", since, until, "--", *self._code))
 
     def _manifest_at(self, repo: Repo, revision: str) -> str:
-        return str(repo.git.show(f"{revision}:{self.name}/{self.manifest}"))
+        return str(repo.git.show(f"{revision}:{self._folder / self.manifest}"))
 
     @abstractmethod
     def _version(self, manifest: str) -> str: ...
@@ -86,14 +89,15 @@ class PythonLibrary(Library):
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
-        pyproject_path = root / self.name / self.manifest
+        pyproject_path = root / self._folder / self.manifest
         pyproject = tomlkit.parse(pyproject_path.read_text(encoding=ENCODING))
-        cast("Table", pyproject[PROJECT_TABLE])[VERSION_KEY] = str(version)
+        project = cast("Table", pyproject[PROJECT_TABLE])
+        project[VERSION_KEY] = str(version)
         pyproject_path.write_text(tomlkit.dumps(pyproject), encoding=ENCODING)
-        lock_path = root / self.name / UV_LOCK
+        lock_path = root / self._folder / UV_LOCK
         lock = tomlkit.parse(lock_path.read_text(encoding=ENCODING))
         for package in cast("AoT", lock["package"]):
-            if package["name"] == self.name:
+            if package["name"] == project["name"]:
                 package[VERSION_KEY] = str(version)
         lock_path.write_text(tomlkit.dumps(lock), encoding=ENCODING)
 
@@ -108,7 +112,7 @@ class NpmLibrary(Library):
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
-        for path in (root / self.name / self.manifest, root / self.name / PACKAGE_LOCK):
+        for path in (root / self._folder / self.manifest, root / self._folder / PACKAGE_LOCK):
             data = json.loads(path.read_text(encoding=ENCODING))
             data[VERSION_KEY] = str(version)
             # package-lock.json repeats the version in its root package entry
@@ -118,9 +122,12 @@ class NpmLibrary(Library):
             path.write_text(f"{text}\n", encoding=ENCODING)
 
 
-LIBRARIES: tuple[Library, ...] = (
-    PythonLibrary("markcom"),
-    # projects extend these two files directly, so they are web-config's code
-    NpmLibrary("markcom-web-config", extra_code=("tsconfig.json", "prettier.json")),
-    NpmLibrary("markcom-i18n"),
-)
+KINDS: dict[LibraryKind, type[Library]] = {
+    LibraryKind.UV: PythonLibrary,
+    LibraryKind.NPM: NpmLibrary,
+}
+
+
+def load_libraries(root: Path) -> tuple[Library, ...]:
+    """The libraries the release.json at `root` lists."""
+    return tuple(KINDS[library.kind](library) for library in load_release_config(root).libraries)

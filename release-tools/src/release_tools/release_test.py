@@ -1,5 +1,6 @@
 import json
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -219,3 +220,42 @@ def test_rejected_push_releases_nothing(released, capsys, hook):
     assert main() == 1
     assert "release failed" in capsys.readouterr().out
     assert_nothing_released(released, tags, pushed)
+
+
+def test_root_level_project_releases_under_its_own_tag_prefix(root_project):
+    repo, origin = root_project
+    assert main() == 0
+    assert {tag.name for tag in origin.tags} == {"v0.1.0"}
+    with (Path(repo.working_dir) / "src" / "sample" / "__init__.py").open("a") as file:
+        file.write("y = 2\n")
+    repo.git.commit("-a", "-m", "code")
+    repo.git.push("origin", "HEAD:main")
+    assert main() == 0
+    assert {tag.name for tag in origin.tags} == {"v0.1.0", "v0.1.1"}
+    assert 'version = "0.1.1"' in origin.git.show("main:pyproject.toml")
+    assert 'version = "0.1.1"' in origin.git.show("main:uv.lock")
+
+
+def test_released_tags_go_to_github_output(released, monkeypatch, tmp_path):
+    output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    new = bumped(declared(released, "markcom"), "patch")
+    released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
+    assert main() == 0
+    assert output.read_text(encoding="utf-8") == f"tags=markcom-v{new}\n"
+
+
+@pytest.mark.usefixtures("labels")
+@pytest.mark.parametrize("config", [None, '{"libraries": [{"name": "x", "kind": "pip"}]}'])
+def test_missing_or_invalid_release_config_fails(clone, capsys, config):
+    def replace_config():
+        if config is None:
+            clone.repo.git.rm("-q", "release.json")
+        else:
+            clone.write("release.json", config)
+
+    clone.push_to_main(replace_config)
+    tags = clone.origin_tags()
+    assert main() == 1
+    assert "release.json" in capsys.readouterr().out
+    assert clone.origin_tags() == tags
