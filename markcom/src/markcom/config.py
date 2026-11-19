@@ -101,7 +101,6 @@ class UiServerConfig(StrictModel):
     # Seconds between NiceGUI's checks of bound values.
     binding_refresh_sec: Seconds
     reconnect_timeout_sec: Seconds
-    message_history: Count
 
 
 class MarkcomConfig(StrictModel):

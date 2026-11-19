@@ -16,7 +16,6 @@
   "ui_server": {
     "shutdown_grace_sec": 1,
     "binding_refresh_sec": 0.5,
-    "reconnect_timeout_sec": 3.0,
-    "message_history": 1000
+    "reconnect_timeout_sec": 3.0
   }
 }

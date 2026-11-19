@@ -29,6 +29,8 @@ UVICORN_LOG_LEVEL: int = logging.WARNING
 WEBSOCKETS: str = "wsproto"
 # ui.run's default. Not config: QtWebEngine and desktop browsers ignore the viewport meta tag.
 VIEWPORT: str = "width=device-width, initial-scale=1"
+# ui.run's default: messages kept to resend after the websocket drops (suspend and resume).
+MESSAGE_HISTORY: int = 1000
 
 
 def configure(root: Callable[[], None], title: str) -> None:
@@ -43,7 +45,7 @@ def configure(root: Callable[[], None], title: str) -> None:
         language=None,
         binding_refresh_interval=CONFIG.ui_server.binding_refresh_sec,
         reconnect_timeout=CONFIG.ui_server.reconnect_timeout_sec,
-        message_history_length=CONFIG.ui_server.message_history,
+        message_history_length=MESSAGE_HISTORY,
         tailwind=True,
         unocss=None,
         prod_js=True,
