@@ -140,9 +140,11 @@ jobs:
         run: npm run test:e2e
 
   # On every push to main (a merged PR included), releases each library whose code or install
-  # manifest changed: the next version, sized by the release:minor or release:major labels of the
-  # pull requests that changed it, is committed to main, then tagged <library>-v<version>. markcom's tag is what projects install it by and
-  # Renovate watches. Runs take turns, so each starts from the last one's tags.
+  # manifest changed since its latest tag: the tag's next version, sized by the merged PR's
+  # release:minor or release:major label (a patch without one), is committed to main and tagged
+  # <library>-v<version>. markcom's tag is what projects install it by and Renovate watches. The
+  # job fails if main has moved past its commit; the run for the newest commit releases.
+
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [markcom, markcom-integration, web-libraries, release-tools]
@@ -164,11 +166,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Recent merged pull requests' labels, by merge commit: release sizes each library's
-          # bump from those merged since its last release that changed it.
-          RELEASE_PULLS=$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged --base main \
-            --limit 100 --json mergeCommit,labels)
-          export RELEASE_PULLS
+          # The labels of the pull request merged as this commit; none for a direct push.
+          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" |
+            jq -r --arg sha "$GITHUB_SHA" '.[] | select(.merge_commit_sha == $sha) | .labels[].name')
+          export RELEASE_LABELS
           uv run --locked --project release-tools release
 
   # After the release job, publishes each web library's latest tag when npm doesn't have that

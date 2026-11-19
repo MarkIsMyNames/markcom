@@ -1,10 +1,9 @@
-"""Release on main, run at the pushed commit with every tag fetched. A library whose code or
-install manifest changed since its last tag gets the next version, committed to main and tagged;
-one never tagged is tagged at the version its files declare. The bump is the largest that the
-labels of the pull requests merged since its last tag, and changing it, ask for. RELEASE_PULLS
-holds the JSON that `gh pr list --state merged --json mergeCommit,labels` prints."""
+"""Release on main, run at the pushed commit with every tag fetched; main must not have moved past
+it. A library whose code or install manifest changed since its latest tag gets that tag's next
+version, sized by the merged pull request's release:minor or release:major label (RELEASE_LABELS,
+one per line), otherwise a patch; the version is committed to main and tagged. A library never
+tagged is tagged at the version its files declare."""
 
-import json
 import os
 from pathlib import Path
 
@@ -12,55 +11,28 @@ from git import GitCommandError, Repo
 
 from release_tools.libraries import LIBRARIES, Library, VersionError
 from release_tools.report import error, say
-from release_tools.versions import Version, bump_level
+from release_tools.versions import BumpLevel, Version, bump_level
 
-PULLS_VARIABLE = "RELEASE_PULLS"
+LABELS_VARIABLE = "RELEASE_LABELS"
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
-
-type Release = tuple[Library, Version]
 
 
 class ReleaseError(RuntimeError):
     pass
 
 
-def _read_pulls() -> dict[str, frozenset[str]]:
-    """Each merged pull request's labels, by the commit it was merged as."""
-    try:
-        return {
-            pull["mergeCommit"]["oid"]: frozenset(label["name"] for label in pull["labels"])
-            for pull in json.loads(os.environ[PULLS_VARIABLE])
-            if pull["mergeCommit"] is not None
-        }
-    except (ValueError, KeyError, TypeError) as failure:
-        message = f"{PULLS_VARIABLE} must hold the JSON that gh pr list prints"
-        raise ReleaseError(message) from failure
-
-
-def _decide(repo: Repo, library: Library, pulls: dict[str, frozenset[str]]) -> Release | None:
-    declared = library.version_at(repo, "HEAD")
+def _next_version(repo: Repo, library: Library, level: BumpLevel) -> Version | None:
+    """The version to release the library at, or None when it hasn't changed."""
     latest = library.latest_release(repo)
     if latest is None:
-        return library, declared
-    if declared != latest:
-        message = f"{library.name}: version {declared} differs from the last release, {latest}"
-        raise ReleaseError(message)
-    tag = library.tag(latest)
-    if not library.release_inputs_changed(repo, tag, "HEAD"):
-        return None
-    # labels of the pull requests merged since the tag that changed this library
-    merged = repo.git.rev_list("--first-parent", f"{tag}..HEAD").split()
-    labels = [
-        label
-        for commit in merged
-        if commit in pulls and library.release_inputs_changed(repo, f"{commit}^1", commit)
-        for label in pulls[commit]
-    ]
-    return library, declared.bump(bump_level(labels))
+        return library.version_at(repo, "HEAD")
+    if library.release_inputs_changed(repo, library.tag(latest), "HEAD"):
+        return latest.bump(level)
+    return None
 
 
-def _publish(repo: Repo, releases: list[Release]) -> None:
+def _publish(repo: Repo, releases: list[tuple[Library, Version]]) -> None:
     """Commits any version files that changed, tags every release, and pushes it all at once."""
     for library, version in releases:
         library.write_version(Path(repo.working_dir), version)
@@ -81,13 +53,20 @@ def _publish(repo: Repo, releases: list[Release]) -> None:
 
 
 def _run(repo: Repo) -> None:
-    # first: an older run, or a re-run, would compare an old commit with newer tags
     repo.remotes.origin.fetch("main")
     if repo.commit("origin/main") != repo.commit("HEAD"):
-        say("main moved on; the run for the newer commit releases this")
-        return
-    pulls = _read_pulls()
-    releases = [found for library in LIBRARIES if (found := _decide(repo, library, pulls))]
+        message = "main has moved past this commit; the run for main's newest commit releases it"
+        raise ReleaseError(message)
+    try:
+        level = bump_level(os.environ[LABELS_VARIABLE].splitlines())
+    except KeyError as missing:
+        message = f"{LABELS_VARIABLE} must hold the merged pull request's labels, one per line"
+        raise ReleaseError(message) from missing
+    releases = []
+    for library in LIBRARIES:
+        version = _next_version(repo, library, level)
+        if version is not None:
+            releases.append((library, version))
     if not releases:
         say("nothing to release")
         return

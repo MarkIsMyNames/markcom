@@ -42,7 +42,7 @@ npm install --save-dev @markcom/web-config
 
 CI releases every library on its own, and is the only thing that changes a version. On every push to `main`, for each library whose code or install manifest changed since its last release:
 
-1. CI picks the next version: a patch, or the next minor or major when a pull request that changed the library since its last release has the `release:minor` or `release:major` label (the largest wins). From 0.x, `release:major` gives 1.0.0, so a breaking change below 1.0 takes `release:minor`.
+1. CI takes the library's latest tag and bumps it: a patch, or the next minor or major when the merged pull request has the `release:minor` or `release:major` label (the larger wins). A library with no tag yet is released at the version in its files. From 0.x, `release:major` gives 1.0.0, so a breaking change below 1.0 takes `release:minor`.
 2. CI commits that version to `main` as `chore(release): <library> <version>, …`, in `markcom/pyproject.toml` and `markcom/uv.lock`, or the package's `package.json` and `package-lock.json`.
 3. CI tags that commit `<library>-v<version>` (`markcom-v…`, `markcom-web-config-v…`, `markcom-i18n-v…`) and publishes each npm package from its tag. Projects install `markcom` by its tag.
 
@@ -54,7 +54,7 @@ What counts:
 | `@markcom/web-config` | `src`, `tsconfig.json`, `prettier.json` | `package.json` without `devDependencies`, `overrides` and scripts other than build, publish and install ones |
 | `@markcom/i18n` | `src`, tests excluded | as for web-config |
 
-Tests, lock files, dev dependencies, tool settings and build settings release nothing. Never edit a version, run `npm publish` or push a `markcom-*` tag by hand: the `versions-unchanged` check fails a pull request that changes a version, and the release fails on a version that differs from the last release. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored. The release logic lives in `release-tools/`.
+Tests, lock files, dev dependencies, tool settings and build settings release nothing. Never edit a version, run `npm publish` or push a `markcom-*` tag by hand: the `versions-unchanged` check fails a pull request that changes a version. The release job fails if `main` has moved past the commit it runs for; the run for the newest commit releases instead. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored. The release logic lives in `release-tools/`.
 
 ## Checks
 

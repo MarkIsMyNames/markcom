@@ -26,16 +26,6 @@ def bumped(version, level):
     }[level]
 
 
-def pulls(*merged):
-    """RELEASE_PULLS as gh pr list prints it: (merge commit, [label names]) per pull request."""
-    return json.dumps(
-        [
-            {"mergeCommit": {"oid": commit.hexsha}, "labels": [{"name": name} for name in names]}
-            for commit, names in merged
-        ]
-    )
-
-
 def changed_lines(clone, before, after, path):
     diff = clone.origin.git.diff(before, after, "--", path).splitlines()
     return [line for line in diff if line[:1] in "+-" and line[:3] not in ("+++", "---")]
@@ -48,13 +38,13 @@ def assert_nothing_released(clone, tags, main_commit):
 
 @pytest.fixture
 def labels(monkeypatch):
-    monkeypatch.setenv("RELEASE_PULLS", "[]")
+    monkeypatch.setenv("RELEASE_LABELS", "")
 
 
 @pytest.fixture
 def released(clone, monkeypatch):
     """A clone after a first release run: every library tagged at its declared version."""
-    monkeypatch.setenv("RELEASE_PULLS", "[]")
+    monkeypatch.setenv("RELEASE_LABELS", "")
     assert main() == 0
     for library in ("markcom", "markcom-web-config", "markcom-i18n"):
         assert f"{library}-v{declared(clone, library)}" in clone.origin_tags()
@@ -159,59 +149,40 @@ def test_several_libraries_share_one_release_commit(released):
     ]
 
 
-def _raise_by_hand(clone):
-    clone.set_npm_version("markcom-web-config", "99.0.0", lock=True)
+def test_next_version_comes_from_the_tag_not_the_version_file(released):
+    new = bumped(declared(released, "markcom-web-config"), "patch")
+
+    def edit_version_and_code():
+        released.set_npm_version("markcom-web-config", "99.0.0", lock=True)
+        released.append("markcom-web-config/src/eslint.ts", "// x\n")
+
+    released.push_to_main(edit_version_and_code)
+    assert main() == 0
+    assert f"markcom-web-config-v{new}" in released.origin_tags()
+    manifest = json.loads(released.file_at_origin_main("markcom-web-config/package.json"))
+    assert manifest["version"] == new
 
 
-def _lower_with_another_change(clone):
-    clone.set_markcom_version("0.0.1")
-    clone.append("markcom-i18n/src/vite.ts", "// x\n")
-
-
-def _pre_release(clone):
-    clone.set_npm_version("markcom-web-config", "99.0.0-rc.1")
-
-
-@pytest.mark.parametrize(
-    ("change", "message"),
-    [
-        (_raise_by_hand, "markcom-web-config: version 99.0.0 differs from the last release"),
-        (_lower_with_another_change, "markcom: version 0.0.1 differs from the last release"),
-        (_pre_release, "markcom-web-config: version 99.0.0-rc.1 is not of the form X.Y.Z"),
-    ],
-)
-def test_bad_version_fails_before_anything_is_released(released, capsys, change, message):
-    released.push_to_main(lambda: change(released))
-    tags, pushed = released.origin_tags(), released.origin_main()
-    assert main() == 1
-    assert message in capsys.readouterr().out
-    assert_nothing_released(released, tags, pushed)
-
-
-@pytest.mark.parametrize("value", ["{ broken", None])
-def test_bad_pull_list_fails(clone, monkeypatch, capsys, value):
-    if value is None:
-        monkeypatch.delenv("RELEASE_PULLS", raising=False)
-    else:
-        monkeypatch.setenv("RELEASE_PULLS", value)
+def test_missing_labels_variable_fails(clone, monkeypatch, capsys):
+    monkeypatch.delenv("RELEASE_LABELS", raising=False)
     tags, pushed = clone.origin_tags(), clone.origin_main()
     assert main() == 1
-    assert "RELEASE_PULLS" in capsys.readouterr().out
+    assert "RELEASE_LABELS" in capsys.readouterr().out
     assert_nothing_released(clone, tags, pushed)
 
 
-def test_run_for_a_commit_main_has_moved_past_releases_nothing(released, capsys):
+def test_run_for_a_commit_main_has_moved_past_fails(released, capsys):
     released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
     run_commit = released.repo.head.commit
     released.push_to_main(lambda: released.append("README.md", "\nx\n"))
     tags, newer = released.origin_tags(), released.origin_main()
     released.repo.git.checkout(run_commit.hexsha)
-    assert main() == 0
-    assert "main moved on" in capsys.readouterr().out
+    assert main() == 1
+    assert "main has moved past this commit" in capsys.readouterr().out
     assert_nothing_released(released, tags, newer)
 
 
-def test_older_run_after_a_newer_release_says_main_moved_on(released, capsys):
+def test_older_run_after_a_newer_release_fails_without_releasing(released, capsys):
     released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
     older = released.repo.head.commit
     released.push_to_main(lambda: released.append("markcom/src/markcom/logs.py", "\n# x\n"))
@@ -219,53 +190,28 @@ def test_older_run_after_a_newer_release_says_main_moved_on(released, capsys):
     tags, newer = released.origin_tags(), released.origin_main()
     released.repo.git.checkout(older.hexsha)
     capsys.readouterr()
-    assert main() == 0
-    assert "main moved on" in capsys.readouterr().out
+    assert main() == 1
+    assert "main has moved past this commit" in capsys.readouterr().out
     assert_nothing_released(released, tags, newer)
 
 
 @pytest.mark.parametrize(
-    ("library", "labels", "level"),
-    [
-        ("markcom", ["documentation", "release:minor"], "minor"),
-        ("markcom-i18n", ["release:minor", "release:major"], "major"),
-    ],
+    ("labels", "level"),
+    [("documentation\nrelease:minor", "minor"), ("release:minor\nrelease:major", "major")],
 )
-def test_label_sets_the_bump_for_the_library_changed(released, monkeypatch, library, labels, level):
-    new = bumped(declared(released, library), level)
-    code = CODE if library == "markcom" else "markcom-i18n/src/vite.ts"
-    released.push_to_main(lambda: released.append(code, "\n// x\n"))
-    monkeypatch.setenv("RELEASE_PULLS", pulls((released.origin_main(), labels)))
+def test_merged_pull_request_label_sets_the_bump(released, monkeypatch, labels, level):
+    markcom = bumped(declared(released, "markcom"), level)
+    i18n = bumped(declared(released, "markcom-i18n"), level)
+
+    def change_two():
+        released.append(CODE, "\n# x\n")
+        released.append("markcom-i18n/src/vite.ts", "// x\n")
+
+    released.push_to_main(change_two)
+    monkeypatch.setenv("RELEASE_LABELS", labels)
     tags = released.origin_tags()
     assert main() == 0
-    assert released.origin_tags() - tags == {f"{library}-v{new}"}
-
-
-def test_label_of_an_earlier_unreleased_pull_request_still_counts(released, monkeypatch):
-    # the labelled pull request's own run found main moved on and stood aside
-    new = bumped(declared(released, "markcom"), "major")
-    released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
-    labelled = released.origin_main()
-    released.push_to_main(lambda: released.append("README.md", "\nx\n"))
-    monkeypatch.setenv(
-        "RELEASE_PULLS", pulls((labelled, ["release:major"]), (released.origin_main(), []))
-    )
-    assert main() == 0
-    assert f"markcom-v{new}" in released.origin_tags()
-
-
-def test_label_applies_only_to_the_libraries_its_pull_request_changed(released, monkeypatch):
-    i18n = bumped(declared(released, "markcom-i18n"), "minor")
-    markcom = bumped(declared(released, "markcom"), "patch")
-    released.push_to_main(lambda: released.append("markcom-i18n/src/vite.ts", "// x\n"))
-    labelled = released.origin_main()
-    released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
-    monkeypatch.setenv(
-        "RELEASE_PULLS", pulls((labelled, ["release:minor"]), (released.origin_main(), []))
-    )
-    tags = released.origin_tags()
-    assert main() == 0
-    assert released.origin_tags() - tags == {f"markcom-i18n-v{i18n}", f"markcom-v{markcom}"}
+    assert released.origin_tags() - tags == {f"markcom-v{markcom}", f"markcom-i18n-v{i18n}"}
 
 
 @pytest.mark.parametrize(
