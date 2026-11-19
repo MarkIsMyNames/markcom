@@ -28,7 +28,7 @@ def run[TConfig: BaseAppConfig, TSecrets: BaseSecrets, TResult](
     except ConfigError as error:
         # Logging is not configured yet, so the error goes straight to stderr.
         sys.stderr.write(f"Configuration error: {error}\n")
-        sys.exit(ExitCode.CONFIG_ERROR)
+        raise SystemExit(ExitCode.CONFIG_ERROR) from error
     configure_logging(config.log_level)
     # variable names only, never values
     logger.info(
