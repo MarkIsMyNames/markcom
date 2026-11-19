@@ -23,8 +23,6 @@ from markcom.own_origin import OwnOriginOnly, local_url
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# its INFO lines carry request paths and queries, NiceGUI's client_id (a session ID) among them
-UVICORN_LOG_LEVEL: int = logging.WARNING
 # The websocket implementation NiceGUI runs on.
 WEBSOCKETS: str = "wsproto"
 # ui.run's default. Not config: QtWebEngine and desktop browsers ignore the viewport meta tag.
@@ -73,7 +71,9 @@ class UiServer(AbstractContextManager["UiServer"]):
             port=port,
             # Leave the app's logging set up as it is.
             log_config=None,
-            log_level=UVICORN_LOG_LEVEL,
+            # None: uvicorn's loggers follow config.json's level; at INFO they log request
+            # paths and queries, NiceGUI's client_id among them
+            log_level=None,
             ws=WEBSOCKETS,
             timeout_graceful_shutdown=CONFIG.ui_server.shutdown_grace_sec,
         )
