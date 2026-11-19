@@ -139,8 +139,8 @@ jobs:
         if: matrix.library == 'markcom-i18n'
         run: npm run test:e2e
 
-  # On every push to main (a merged PR included), releases each library whose code or install
-  # manifest changed since its latest tag: the tag's next version, sized by the merged PR's
+  # On every push to main (a merged PR included), releases each library whose code or manifest
+  # changed since its latest tag: the tag's next version, sized by the merged PR's
   # release:minor or release:major label (a patch without one), is committed to main and tagged
   # <library>-v<version>. markcom's tag is what projects install it by and Renovate watches. The
   # job fails if main has moved past its commit; the run for the newest commit releases.

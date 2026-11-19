@@ -64,27 +64,14 @@ def test_first_run_tags_untagged_libraries_at_their_declared_versions(clone):
     assert clone.origin_main() == pushed
 
 
-def _outside_the_release_inputs(clone):
+def _outside_the_code(clone):
     clone.append("markcom/src/markcom/runner_test.py", "\n# x\n")
     clone.append("markcom-i18n/src/vite.test.ts", "// x\n")
-    clone.append("markcom/pyproject.toml", "\n[tool.zz]\nsetting = true\n")
-    clone.edit_json(
-        "markcom-i18n/package.json",
-        lambda data: (
-            data["devDependencies"].update({"zz-dev": "^1.0.0"}),
-            data["overrides"].update({"zz-override": "^1.0.0"}),
-        ),
-    )
     clone.edit_json("markcom-i18n/tsconfig.json", lambda data: data.update(compileOnSave=False))
-    # npm install re-sorts dependencies
-    clone.edit_json(
-        "markcom-web-config/package.json",
-        lambda data: data.update(dependencies=dict(reversed(data["dependencies"].items()))),
-    )
 
 
-@pytest.mark.parametrize("change", [lambda _clone: None, _outside_the_release_inputs])
-def test_releases_nothing_without_a_change_to_code_or_install_manifest(released, change):
+@pytest.mark.parametrize("change", [lambda _clone: None, _outside_the_code])
+def test_releases_nothing_without_a_code_change(released, change):
     released.push_to_main(lambda: change(released))
     tags, pushed = released.origin_tags(), released.origin_main()
     assert main() == 0
@@ -111,13 +98,14 @@ def test_code_change_gets_the_next_patch_in_a_release_commit(released):
 @pytest.mark.parametrize(
     ("library", "relative", "change"),
     [
-        # a runtime dependency is part of the install manifest
+        # any manifest change counts, dev-only ones included
         ("markcom-i18n", "package.json", lambda data: data["dependencies"].update(zz="^1.0.0")),
+        ("markcom-i18n", "package.json", lambda data: data["overrides"].update(zz="^1.0.0")),
         # projects extend web-config's prettier.json directly, so it is its code
         ("markcom-web-config", "prettier.json", lambda data: data.update(zzRule=True)),
     ],
 )
-def test_release_input_change_gets_the_next_patch(released, library, relative, change):
+def test_manifest_or_config_change_gets_the_next_patch(released, library, relative, change):
     new = bumped(declared(released, library), "patch")
     released.push_to_main(lambda: released.edit_json(f"{library}/{relative}", change))
     assert main() == 0

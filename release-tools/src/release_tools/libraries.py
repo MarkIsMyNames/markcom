@@ -17,15 +17,8 @@ UV_LOCK = "uv.lock"
 PACKAGE_JSON = "package.json"
 PACKAGE_LOCK = "package-lock.json"
 PROJECT_TABLE = "project"
-NPM_SCRIPTS_KEY = "scripts"
-# package.json fields no installer reads
-NPM_DEV_ONLY_KEYS = ("devDependencies", "overrides")
 # npm's own formatting
 NPM_INDENT = 2
-# npm runs these when it packs, publishes or installs; the rest never reach a user
-SHIPPED_NPM_SCRIPTS = frozenset(
-    {"build", "prepare", "prepack", "prepublishOnly", "preinstall", "install", "postinstall"}
-)
 
 
 class VersionError(ValueError):
@@ -34,8 +27,8 @@ class VersionError(ValueError):
 
 class Library(ABC):
     """One library this repository releases, in the folder named after it. A release follows a
-    change to its code (its `src` folder and any `extra_code` files, tests excluded) or to its
-    install manifest."""
+    change to its code: its `src` folder, any `extra_code` files and its manifest, tests
+    excluded."""
 
     manifest: ClassVar[str]
     tests: ClassVar[str]
@@ -44,7 +37,7 @@ class Library(ABC):
         self.name = name
         # git pathspecs from the repository root; an exclude pattern's * also matches /
         self._code = (
-            *(f"{name}/{path}" for path in (CODE_FOLDER, *extra_code)),
+            *(f"{name}/{path}" for path in (CODE_FOLDER, self.manifest, *extra_code)),
             f":(exclude){name}/{self.tests}",
         )
 
@@ -69,21 +62,14 @@ class Library(ABC):
         tags = [tag.name for tag in repo.tags if tag.name.startswith(prefix)]
         return max((Version.parse(tag.removeprefix(prefix)) for tag in tags), default=None)
 
-    def release_inputs_changed(self, repo: Repo, since: str, until: str) -> bool:
-        before = self._install_manifest(self._manifest_at(repo, since))
-        after = self._install_manifest(self._manifest_at(repo, until))
-        changed_code = repo.git.diff("--name-only", since, until, "--", *self._code)
-        return before != after or bool(changed_code)
+    def changed(self, repo: Repo, since: str, until: str) -> bool:
+        return bool(repo.git.diff("--name-only", since, until, "--", *self._code))
 
     def _manifest_at(self, repo: Repo, revision: str) -> str:
         return str(repo.git.show(f"{revision}:{self.name}/{self.manifest}"))
 
     @abstractmethod
     def _version(self, manifest: str) -> str: ...
-
-    @abstractmethod
-    def _install_manifest(self, manifest: str) -> str:
-        """The parts of the manifest an install reads, without the version, as sorted JSON."""
 
     @abstractmethod
     def write_version(self, root: Path, version: Version) -> None:
@@ -97,13 +83,6 @@ class PythonLibrary(Library):
     @override
     def _version(self, manifest: str) -> str:
         return str(tomllib.loads(manifest)[PROJECT_TABLE][VERSION_KEY])
-
-    @override
-    def _install_manifest(self, manifest: str) -> str:
-        data = tomllib.loads(manifest)
-        del data[PROJECT_TABLE][VERSION_KEY]
-        hatch = data.get("tool", {}).get("hatch")
-        return json.dumps([data[PROJECT_TABLE], data["build-system"], hatch], sort_keys=True)
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
@@ -126,15 +105,6 @@ class NpmLibrary(Library):
     @override
     def _version(self, manifest: str) -> str:
         return str(json.loads(manifest)[VERSION_KEY])
-
-    @override
-    def _install_manifest(self, manifest: str) -> str:
-        data = json.loads(manifest)
-        scripts = data.pop(NPM_SCRIPTS_KEY, {})
-        for key in (VERSION_KEY, *NPM_DEV_ONLY_KEYS):
-            data.pop(key, None)
-        data[NPM_SCRIPTS_KEY] = {key: scripts[key] for key in scripts if key in SHIPPED_NPM_SCRIPTS}
-        return json.dumps(data, sort_keys=True)
 
     @override
     def write_version(self, root: Path, version: Version) -> None:

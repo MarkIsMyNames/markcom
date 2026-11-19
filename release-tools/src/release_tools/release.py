@@ -1,5 +1,5 @@
 """Release on main, run at the pushed commit with every tag fetched; main must not have moved past
-it. A library whose code or install manifest changed since its latest tag gets that tag's next
+it. A library whose code or manifest changed since its latest tag gets that tag's next
 version, sized by the merged pull request's release:minor or release:major label (RELEASE_LABELS,
 one per line), otherwise a patch; the version is committed to main and tagged. A library never
 tagged is tagged at the version its files declare."""
@@ -29,7 +29,7 @@ def _next_version(repo: Repo, library: Library, level: BumpLevel) -> Version | N
     latest = library.latest_release(repo)
     if latest is None:
         return library.version_at(repo, HEAD)
-    if library.release_inputs_changed(repo, library.tag(latest), HEAD):
+    if library.changed(repo, library.tag(latest), HEAD):
         return latest.bump(level)
     return None
 

@@ -25,6 +25,6 @@ Always reply in caveman mode (the `caveman` skill), from the first reply to the 
 CI releases each library and is the only thing that changes a version; README.md's Releasing section has the full rules.
 
 - Never change a library's version: `version` in `markcom/pyproject.toml`, `markcom/uv.lock`, a `package.json` or a `package-lock.json`. The `versions-unchanged` check fails a pull request that does.
-- A change to a library's code or install manifest is released as the next patch. For a minor or major release, ask the owner to label the pull request `release:minor` or `release:major`; below 1.0, a breaking change takes `release:minor`, as `release:major` gives 1.0.0. Tests, lock files, dev dependencies and tool settings release nothing.
+- A change to a library's code (`src`, tests excluded) or its `pyproject.toml` or `package.json` is released as the next patch. For a minor or major release, ask the owner to label the pull request `release:minor` or `release:major`; below 1.0, a breaking change takes `release:minor`, as `release:major` gives 1.0.0. Tests, lock files and build settings release nothing.
 - Never run `npm publish`, push a `markcom-*` tag or push a version commit to `main`. `chore(release): …` commits on `main` come from CI; pull before branching.
 - Change `release-tools/` test first: its tests run the tools against throwaway clones of this repository.
