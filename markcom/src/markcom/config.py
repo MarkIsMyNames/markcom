@@ -98,7 +98,6 @@ class UiServerConfig(StrictModel):
 
     # Seconds open connections (the window's websocket) get to close on leaving.
     shutdown_grace_sec: Count
-    viewport: str
     # Seconds between NiceGUI's checks of bound values.
     binding_refresh_sec: Seconds
     reconnect_timeout_sec: Seconds

@@ -27,6 +27,8 @@ logger: logging.Logger = logging.getLogger(__name__)
 UVICORN_LOG_LEVEL: int = logging.WARNING
 # The websocket implementation NiceGUI runs on.
 WEBSOCKETS: str = "wsproto"
+# ui.run's default. Not config: QtWebEngine and desktop browsers ignore the viewport meta tag.
+VIEWPORT: str = "width=device-width, initial-scale=1"
 
 
 def configure(root: Callable[[], None], title: str) -> None:
@@ -35,7 +37,7 @@ def configure(root: Callable[[], None], title: str) -> None:
     core.app.config.add_run_config(
         reload=False,
         title=title,
-        viewport=CONFIG.ui_server.viewport,
+        viewport=VIEWPORT,
         favicon=None,
         dark=None,
         language=None,
