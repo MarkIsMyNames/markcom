@@ -1,0 +1,32 @@
+# Fails a pull request that changes the version of a library its repository's release.json
+# lists: the release workflow writes every version. A repository calls it on pull requests:
+#
+#   versions-unchanged:
+#     if: github.event_name == 'pull_request'
+#     uses: MarkIsMyNames/markcom/.github/workflows/versions-unchanged.yml@<commit sha> # release-tools-v<version>
+#     permissions:
+#       contents: read
+name: Versions unchanged
+
+on:
+  workflow_call:
+
+jobs:
+  versions-unchanged:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The pull request's merge commit and its first parent, main as it is now.
+          fetch-depth: 2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .release-tools
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Fail on a changed version
+        run: uv run --locked --project .release-tools/release-tools versions-unchanged

@@ -40,10 +40,23 @@ npm install --save-dev @markcom/web-config
 
 ## Releasing
 
-CI does both on every push to `main`:
+CI releases every library `release.json` lists, each on its own, and is the only thing that changes a version. On every push to `main`, for each library whose code changed since its latest tag:
 
-- **markcom**: a version raised by hand in `markcom/pyproject.toml` (a minor or major release) is tagged `markcom-v<version>` as it is. Otherwise, if the source or `pyproject.toml` changed since the last release, CI tags the next patch version. Nothing is committed back to `main`.
-- **npm packages**: a version raised by hand in `package.json` is published as it is. Otherwise a changed package is published as the next patch version. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
+1. CI takes that tag and bumps it: a patch, or the next minor or major when the merged pull request has the `release:minor` or `release:major` label (the larger wins). A library with no tag yet is released at the version in its files. From 0.x, `release:major` gives 1.0.0, so a breaking change below 1.0 takes `release:minor`.
+2. CI commits that version to `main` as `chore(release): <library> <version>, …`, in the library's `pyproject.toml` and `uv.lock`, or its `package.json` and `package-lock.json`.
+3. CI tags that commit with the library's tag prefix (`markcom-v…`, `markcom-web-config-v…`, `markcom-i18n-v…`, `release-tools-v…`), creates a GitHub release, and publishes each npm package from its tag. Projects install `markcom` by its tag.
+
+A library's code is its `src` folder (tests excluded), its manifest (`pyproject.toml` or `package.json`, any change) and the files `release.json` lists as `extra_code`: web-config's `tsconfig.json` and `prettier.json`, which projects extend directly. Tests, lock files and build settings such as i18n's `tsconfig.json` release nothing.
+
+Never edit a version, run `npm publish` or push a release tag by hand: the `versions-unchanged` check fails a pull request that changes a version. The release job fails if `main` has moved past the commit it runs for; the run for the newest commit releases instead. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
+
+### Releasing another repository the same way
+
+`release-tools/` is itself a library, released as `release-tools-v<version>`, and its two workflows are shared like the security workflow:
+
+1. Add a `release.json` at the repository root listing its libraries. Each library has `name`, `kind` (`uv` or `npm`), `path` (its folder, `.` for the root), `tag_prefix` (for example `v`) and `extra_code` (files of its code outside `src`, usually `[]`).
+2. Call `.github/workflows/versions-unchanged.yml` on pull requests and `.github/workflows/release.yml` on pushes to `main` after the checks, pinned to the commit of a `release-tools-v*` tag; each file's header shows the job to copy. The release workflow's `tags` output lists what it released, for publish or deploy jobs.
+3. Create the `release:minor` and `release:major` labels (`gh label create`).
 
 ## Checks
 
