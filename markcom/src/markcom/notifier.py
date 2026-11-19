@@ -53,7 +53,7 @@ class DesktopNotifier:
         try:
             self._backend = _open_backend(app_name, icon, desktop_entry)
         except BACKEND_ERRORS:
-            logger.exception("desktop notifications unavailable")
+            logger.error("desktop notifications unavailable")
             self._backend = None
         else:
             logger.info("desktop notifications through %s", type(self._backend).__name__)
@@ -67,4 +67,4 @@ class DesktopNotifier:
         try:
             self._backend.send(title, message, urgency, display_sec)
         except BACKEND_ERRORS:
-            logger.exception("desktop notification failed")
+            logger.error("desktop notification failed")
