@@ -24,9 +24,6 @@ from markcom.notifier import logger as notifier_logger
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# What a menu action may fail with (files: OSError, ValueError; browser: OSError; desktop:
-# RuntimeError). They are logged so the tray keeps running; anything else is a bug, logged too.
-ACTION_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, RuntimeError)
 # What turning a log record into a notification may fail with: a malformed log call (TypeError,
 # ValueError, KeyError) or a Qt object already deleted (RuntimeError).
 NOTIFY_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, KeyError, RuntimeError)
@@ -121,12 +118,9 @@ def _run_logged(action: TrayAction) -> None:
     logger.info("tray action %r started", action.label)
     try:
         action.run()
-    except ACTION_ERRORS:
-        logger.exception("tray action %r failed", action.label)
-        return
     except Exception:
-        # the worker would keep it in a Future nothing reads, so it would vanish
-        logger.exception("bug in tray action %r", action.label)
+        # logged so the tray keeps running; raised, it'd sit in a Future nothing reads
+        logger.exception("tray action %r failed", action.label)
         return
     logger.info("tray action %r finished", action.label)
 
