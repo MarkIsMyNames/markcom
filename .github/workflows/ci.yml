@@ -140,8 +140,8 @@ jobs:
         run: npm run test:e2e
 
   # On every push to main (a merged PR included), releases each library whose code or install
-  # manifest changed: the next version, sized by the merged pull request's labels, is committed
-  # to main, then tagged <library>-v<version>. markcom's tag is what projects install it by and
+  # manifest changed: the next version, sized by the release:minor or release:major labels of the
+  # pull requests that changed it, is committed to main, then tagged <library>-v<version>. markcom's tag is what projects install it by and
   # Renovate watches. Runs take turns, so each starts from the last one's tags.
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -164,10 +164,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The labels of the pull request merged as this commit; none for a direct push.
-          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" |
-            jq -r --arg sha "$GITHUB_SHA" '.[] | select(.merge_commit_sha == $sha) | .labels[].name')
-          export RELEASE_LABELS
+          # Recent merged pull requests' labels, by merge commit: release sizes each library's
+          # bump from those merged since its last release that changed it.
+          RELEASE_PULLS=$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged --base main \
+            --limit 100 --json mergeCommit,labels)
+          export RELEASE_PULLS
           uv run --locked --project release-tools release
 
   # After the release job, publishes each web library's latest tag when npm doesn't have that

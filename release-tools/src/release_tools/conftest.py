@@ -11,13 +11,13 @@ ROOT = Path(__file__).resolve().parents[3]
 
 class Clone:
     """A throwaway clone of this repository's HEAD. Its origin is a bare repository holding that
-    commit as main, and every tag."""
+    commit as main and no tags, so tests never depend on the real repository's releases."""
 
     def __init__(self, tmp_path: Path) -> None:
         self.origin = Repo.init(tmp_path / "origin.git", bare=True, initial_branch="main")
         # no hooks: this push only copies commits out of the real repository
         Repo(ROOT).git(c="core.hooksPath=/dev/null").push(
-            self.origin.working_dir, "HEAD:refs/heads/main", "refs/tags/*:refs/tags/*"
+            self.origin.working_dir, "HEAD:refs/heads/main"
         )
         self.repo = Repo.clone_from(self.origin.working_dir, tmp_path / "work")
         with self.repo.config_writer() as config:
@@ -80,6 +80,15 @@ class Clone:
         change()
         self.repo.git.commit("-a", "--allow-empty", "-m", "change")
         self.repo.git.push("origin", "HEAD:main")
+
+    def tag_off_main(self, tag: str) -> None:
+        """Tags a commit that main never holds, as markcom's old off-main release commits."""
+        self.repo.git.switch("-c", "off-main")
+        self.append("README.md", "\noff main\n")
+        self.repo.git.commit("-a", "-m", "off main")
+        self.repo.git.tag("-a", tag, "-m", tag)
+        self.repo.git.push("origin", tag)
+        self.repo.git.switch("main")
 
     def origin_tags(self) -> set[str]:
         return {tag.name for tag in self.origin.tags}

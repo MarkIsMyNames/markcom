@@ -25,6 +25,16 @@ def bumped(version, level):
     }[level]
 
 
+def pulls(*merged):
+    """RELEASE_PULLS as gh pr list prints it: (merge commit, [label names]) per pull request."""
+    return json.dumps(
+        [
+            {"mergeCommit": {"oid": commit.hexsha}, "labels": [{"name": name} for name in names]}
+            for commit, names in merged
+        ]
+    )
+
+
 def changed_lines(clone, before, after, path):
     diff = clone.origin.git.diff(before, after, "--", path).splitlines()
     return [line for line in diff if line[:1] in "+-" and line[:3] not in ("+++", "---")]
@@ -32,13 +42,13 @@ def changed_lines(clone, before, after, path):
 
 @pytest.fixture
 def labels(monkeypatch):
-    monkeypatch.setenv("RELEASE_LABELS", "")
+    monkeypatch.setenv("RELEASE_PULLS", "[]")
 
 
 @pytest.fixture
 def released(clone, monkeypatch):
     """A clone after a first release run: every library tagged at its declared version."""
-    monkeypatch.setenv("RELEASE_LABELS", "")
+    monkeypatch.setenv("RELEASE_PULLS", "[]")
     assert main() == 0
     for library in ("markcom", "markcom-web-config", "markcom-i18n"):
         assert f"{library}-v{declared(clone, library)}" in clone.origin_tags()
@@ -47,8 +57,15 @@ def released(clone, monkeypatch):
 
 @pytest.mark.usefixtures("labels")
 def test_first_run_tags_untagged_libraries_at_their_declared_versions(clone):
-    pushed = clone.origin_main()
+    # this repository's state before its first run: markcom tagged on an off-main commit with
+    # the same code, the npm packages never tagged
+    clone.tag_off_main(f"markcom-v{declared(clone, 'markcom')}")
+    tags, pushed = clone.origin_tags(), clone.origin_main()
     assert main() == 0
+    assert clone.origin_tags() - tags == {
+        f"{library}-v{declared(clone, library)}"
+        for library in ("markcom-web-config", "markcom-i18n")
+    }
     for library in ("markcom-web-config", "markcom-i18n"):
         assert clone.tagged_commit(f"{library}-v{declared(clone, library)}") == pushed
     assert clone.origin_main() == pushed
@@ -204,27 +221,64 @@ def test_main_moved_on_releases_nothing(released, capsys):
 
 
 def test_minor_label_bumps_only_the_libraries_that_changed(released, monkeypatch):
-    monkeypatch.setenv("RELEASE_LABELS", "documentation\nrelease:minor")
     new = bumped(declared(released, "markcom"), "minor")
     tags = released.origin_tags()
     released.push_to_main(lambda: released.append("markcom/src/markcom/runner.py", "\n# x\n"))
+    pushed = released.origin_main()
+    monkeypatch.setenv("RELEASE_PULLS", pulls((pushed, ["documentation", "release:minor"])))
     assert main() == 0
     assert released.origin_tags() - tags == {f"markcom-v{new}"}
 
 
 def test_major_label_gives_the_next_major(released, monkeypatch):
-    monkeypatch.setenv("RELEASE_LABELS", "release:major")
     new = bumped(declared(released, "markcom-i18n"), "major")
     released.push_to_main(lambda: released.append("markcom-i18n/src/vite.ts", "// x\n"))
+    monkeypatch.setenv("RELEASE_PULLS", pulls((released.origin_main(), ["release:major"])))
     assert main() == 0
     assert f"markcom-i18n-v{new}" in released.origin_tags()
 
 
-def test_missing_labels_variable_fails(clone, monkeypatch, capsys):
-    monkeypatch.delenv("RELEASE_LABELS", raising=False)
+def test_label_of_an_earlier_unreleased_pull_request_still_counts(released, monkeypatch):
+    # the labelled pull request's own run found main moved on and stood aside
+    new = bumped(declared(released, "markcom"), "major")
+    released.push_to_main(lambda: released.append("markcom/src/markcom/runner.py", "\n# x\n"))
+    labelled = released.origin_main()
+    released.push_to_main(lambda: released.append("README.md", "\nx\n"))
+    monkeypatch.setenv(
+        "RELEASE_PULLS", pulls((labelled, ["release:major"]), (released.origin_main(), []))
+    )
+    assert main() == 0
+    assert f"markcom-v{new}" in released.origin_tags()
+
+
+def test_label_applies_only_to_the_libraries_its_pull_request_changed(released, monkeypatch):
+    i18n = bumped(declared(released, "markcom-i18n"), "minor")
+    markcom = bumped(declared(released, "markcom"), "patch")
+    released.push_to_main(lambda: released.append("markcom-i18n/src/vite.ts", "// x\n"))
+    labelled = released.origin_main()
+    released.push_to_main(lambda: released.append("markcom/src/markcom/runner.py", "\n# x\n"))
+    monkeypatch.setenv(
+        "RELEASE_PULLS", pulls((labelled, ["release:minor"]), (released.origin_main(), []))
+    )
+    tags = released.origin_tags()
+    assert main() == 0
+    assert released.origin_tags() - tags == {f"markcom-i18n-v{i18n}", f"markcom-v{markcom}"}
+
+
+def test_unreadable_pull_list_fails(released, monkeypatch, capsys):
+    released.push_to_main(lambda: released.append("markcom/src/markcom/runner.py", "\n# x\n"))
+    monkeypatch.setenv("RELEASE_PULLS", "{ broken")
+    tags = released.origin_tags()
+    assert main() == 1
+    assert "RELEASE_PULLS" in capsys.readouterr().out
+    assert released.origin_tags() == tags
+
+
+def test_missing_pull_list_fails(clone, monkeypatch, capsys):
+    monkeypatch.delenv("RELEASE_PULLS", raising=False)
     tags = clone.origin_tags()
     assert main() == 1
-    assert "RELEASE_LABELS" in capsys.readouterr().out
+    assert "RELEASE_PULLS" in capsys.readouterr().out
     assert clone.origin_tags() == tags
 
 
@@ -237,3 +291,33 @@ def test_rejected_push_fails_without_tags(released, capsys):
     assert main() == 1
     assert "release failed" in capsys.readouterr().out
     assert released.origin_tags() == tags
+
+
+def test_older_run_after_a_newer_release_says_main_moved_on(released, capsys):
+    released.push_to_main(lambda: released.append("markcom/src/markcom/runner.py", "\n# x\n"))
+    older = released.repo.head.commit
+    released.push_to_main(lambda: released.append("markcom/src/markcom/logs.py", "\n# x\n"))
+    assert main() == 0
+    tags, newer = released.origin_tags(), released.origin_main()
+    released.repo.git.checkout(older.hexsha)
+    capsys.readouterr()
+    assert main() == 0
+    assert "main moved on" in capsys.readouterr().out
+    assert released.origin_tags() == tags
+    assert released.origin_main() == newer
+
+
+def test_rejected_tag_leaves_main_untouched(released, capsys):
+    released.push_to_main(lambda: released.append("markcom/src/markcom/runner.py", "\n# x\n"))
+    tags, pushed = released.origin_tags(), released.origin_main()
+    hook = released.path.parent / "origin.git" / "hooks" / "pre-receive"
+    hook.write_text(
+        "#!/bin/sh\n"
+        'while read -r old new ref; do case "$ref" in refs/tags/*) exit 1;; esac; done\n',
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    assert main() == 1
+    assert "release failed" in capsys.readouterr().out
+    assert released.origin_tags() == tags
+    assert released.origin_main() == pushed

@@ -1,9 +1,11 @@
 """Release on main. A library whose code or install manifest changed since its last release is
-released at the next version, sized by the merged pull request's labels and first committed to
-main; one with no release yet is released at the version its files declare. Run at the pushed
-commit, with every tag fetched and RELEASE_LABELS set to the merged pull request's labels, one per
-line (empty for none)."""
+released at the next version, first committed to main; one with no release yet is released at the
+version its files declare. The bump is the largest that the labels of the pull requests merged
+since the library's last release, and changing it, ask for. Run at the pushed commit, with every
+tag fetched and RELEASE_PULLS set to the JSON that
+`gh pr list --state merged --json mergeCommit,labels` prints."""
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,9 +15,9 @@ from git import GitCommandError, Repo
 
 from release_tools.libraries import LIBRARIES, Library, UnreadableVersionError
 from release_tools.report import error, say
-from release_tools.versions import BumpLevel, InvalidVersionError, Version, bump_level
+from release_tools.versions import InvalidVersionError, Version, bump_level
 
-LABELS_VARIABLE = "RELEASE_LABELS"
+PULLS_VARIABLE = "RELEASE_PULLS"
 PUSHED = "HEAD"
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
@@ -23,6 +25,24 @@ BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 
 class ReleaseError(RuntimeError):
     pass
+
+
+# Each merged pull request's labels, by the commit it was merged as.
+type PullLabels = dict[str, frozenset[str]]
+
+
+def _read_pulls(text: str) -> PullLabels:
+    try:
+        return {
+            pull["mergeCommit"]["oid"]: frozenset(label["name"] for label in pull["labels"])
+            for pull in json.loads(text)
+            if pull["mergeCommit"] is not None
+        }
+    except (ValueError, KeyError, TypeError) as failure:
+        message = (
+            f"{PULLS_VARIABLE} is not the JSON that gh pr list --json mergeCommit,labels prints"
+        )
+        raise ReleaseError(message) from failure
 
 
 @dataclass(frozen=True)
@@ -39,7 +59,18 @@ class Release:
         return f"{self.library.name} {self.version}"
 
 
-def _decide(repo: Repo, library: Library, level: BumpLevel) -> Release | None:
+def _labels_since(repo: Repo, library: Library, tag: str, pulls: PullLabels) -> list[str]:
+    """Labels of the pull requests merged on main since `tag` that changed the library."""
+    merged = repo.git.rev_list("--first-parent", f"{tag}..{PUSHED}").split()
+    return [
+        label
+        for commit in merged
+        if commit in pulls and library.release_inputs_changed(repo, f"{commit}^1", commit)
+        for label in pulls[commit]
+    ]
+
+
+def _decide(repo: Repo, library: Library, pulls: PullLabels) -> Release | None:
     try:
         declared = library.version_at(repo, PUSHED)
     except InvalidVersionError as invalid:
@@ -54,8 +85,9 @@ def _decide(repo: Repo, library: Library, level: BumpLevel) -> Release | None:
             "only CI changes versions"
         )
         raise ReleaseError(message)
-    if library.release_inputs_changed(repo, library.tag(latest), PUSHED):
-        return Release(library, declared.bump(level))
+    tag = library.tag(latest)
+    if library.release_inputs_changed(repo, tag, PUSHED):
+        return Release(library, declared.bump(bump_level(_labels_since(repo, library, tag, pulls))))
     return None
 
 
@@ -78,39 +110,43 @@ def _publish(repo: Repo, releases: list[Release]) -> None:
         if repo.is_dirty():
             summary = ", ".join(str(release) for release in releases)
             repo.git.commit("-a", "-m", f"chore(release): {summary}")
-            repo.git.push("origin", "HEAD:main")
         for release in releases:
             repo.create_tag(release.tag, message=str(release))
-        repo.git.push("origin", *(release.tag for release in releases))
+        # all or nothing: a release commit on main without its tag would block every later run
+        repo.git.push("--atomic", "origin", "HEAD:main", *(release.tag for release in releases))
+
+
+def _run(repo: Repo, pulls_json: str) -> list[Release] | None:
+    """Releases what changed and returns it; None when main moved on past this commit."""
+    # first: an older run, or a re-run, compares an old commit with newer tags
+    if _main_moved_on(repo):
+        return None
+    pulls = _read_pulls(pulls_json)
+    releases = [
+        release for library in LIBRARIES if (release := _decide(repo, library, pulls)) is not None
+    ]
+    if releases:
+        _publish(repo, releases)
+    return releases
 
 
 def main() -> int:
-    labels = os.environ.get(LABELS_VARIABLE)
-    if labels is None:
-        error(f"{LABELS_VARIABLE} is not set; set it to the merged pull request's labels")
+    pulls_json = os.environ.get(PULLS_VARIABLE)
+    if pulls_json is None:
+        error(f"{PULLS_VARIABLE} is not set; set it to gh pr list's merged pull requests")
         return 1
-    repo = Repo(search_parent_directories=True)
-    level = bump_level(labels.splitlines())
     try:
-        releases = [
-            release
-            for library in LIBRARIES
-            if (release := _decide(repo, library, level)) is not None
-        ]
+        releases = _run(Repo(search_parent_directories=True), pulls_json)
     except (ReleaseError, UnreadableVersionError) as failure:
         error(str(failure))
         return 1
-    if not releases:
-        say("nothing to release")
-        return 0
-    try:
-        if _main_moved_on(repo):
-            say("main moved on; the run for the newer commit releases this")
-            return 0
-        _publish(repo, releases)
     except GitCommandError as failure:
         error(f"release failed: {failure}")
         return 1
-    for release in releases:
+    if releases is None:
+        say("main moved on; the run for the newer commit releases this")
+    elif not releases:
+        say("nothing to release")
+    for release in releases or ():
         say(f"released {release}")
     return 0

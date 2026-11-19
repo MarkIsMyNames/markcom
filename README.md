@@ -42,7 +42,7 @@ npm install --save-dev @markcom/web-config
 
 CI releases every library on its own, and is the only thing that changes a version. On every push to `main`, for each library whose code or install manifest changed since its last release:
 
-1. CI picks the next version: a patch, or the next minor or major when the merged pull request has the `release:minor` or `release:major` label (the larger wins). From 0.x, `release:major` gives 1.0.0, so a breaking change below 1.0 takes `release:minor`.
+1. CI picks the next version: a patch, or the next minor or major when a pull request that changed the library since its last release has the `release:minor` or `release:major` label (the largest wins). From 0.x, `release:major` gives 1.0.0, so a breaking change below 1.0 takes `release:minor`.
 2. CI commits that version to `main` as `chore(release): <library> <version>, …`, in `markcom/pyproject.toml` and `markcom/uv.lock`, or the package's `package.json` and `package-lock.json`.
 3. CI tags that commit `<library>-v<version>` (`markcom-v…`, `markcom-web-config-v…`, `markcom-i18n-v…`) and publishes each npm package from its tag. Projects install `markcom` by its tag.
 
