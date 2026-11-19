@@ -1,5 +1,5 @@
 import { match } from '@formatjs/intl-localematcher';
-import { flatten } from 'flat';
+import { flattenObject } from 'es-toolkit';
 import type { ParseKeys } from 'i18next';
 
 export type LocaleValue = string | LocaleRecord;
@@ -7,7 +7,11 @@ export type LocaleRecord = { readonly [key: string]: LocaleValue };
 
 /** Every dotted key path that ends in a string, with its string. */
 function flattenLocale(locale: LocaleRecord): ReadonlyMap<string, string> {
-  return new Map(Object.entries(flatten<LocaleRecord, Record<string, string>>(locale)));
+  return new Map(
+    Object.entries(flattenObject(locale)).filter(
+      (entry: [string, unknown]): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
 }
 
 /** The string at a dotted key path; throws if missing or not a string. */

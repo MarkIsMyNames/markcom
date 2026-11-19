@@ -1,6 +1,5 @@
 import { checkInvalidTranslations, checkMissingTranslations } from '@lingual/i18n-check';
-import escapeHtml from 'escape-html';
-import { flatten } from 'flat';
+import { escape as escapeHtml, flattenObject } from 'es-toolkit';
 import type { IndexHtmlTransformContext, Plugin } from 'vite';
 import { leafKeys, lookupString, type LocaleRecord, type LocaleSet } from './locales.js';
 
@@ -17,8 +16,8 @@ const CHECK_OPTIONS: { format: 'i18next' } = { format: 'i18next' };
 const ALLOWED_META_CONTENT: ReadonlySet<string> = new Set(['width=device-width, initial-scale=1']);
 
 /** i18n-check compares flat files: one dotted key per string. */
-function flat(locale: LocaleRecord): Record<string, string> {
-  return flatten<LocaleRecord, Record<string, string>>(locale);
+function flat(locale: LocaleRecord): Record<string, unknown> {
+  return flattenObject(locale);
 }
 
 function withoutPlaceholders(text: string): string {

@@ -50,15 +50,14 @@
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "^0.10.1",
-    "escape-html": "^1.0.3",
-    "flat": "^6.0.1",
-    "@lingual/i18n-check": "^0.9.5"
+    "@lingual/i18n-check": "^0.9.5",
+    "es-toolkit": "^1.53.2"
   },
   "peerDependencies": {
     "i18next": "^27.1.1",
     "react-i18next": "^18.0.1",
-    "vite": "^8.3.7",
-    "react-router": "^8.5.1"
+    "react-router": "^8.5.1",
+    "vite": "^8.3.7"
   },
   "peerDependenciesMeta": {
     "vite": {
@@ -71,25 +70,24 @@
   "devDependencies": {
     "@markcom/web-config": "file:../markcom-web-config",
     "@playwright/test": "^1.65.0",
-    "@types/escape-html": "^1.0.4",
+    "@tsconfig/strictest": "^2.0.8",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
     "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^10.14.0",
     "i18next": "^27.1.1",
     "jiti": "^2.7.0",
     "prettier": "^3.9.10",
     "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-i18next": "^18.0.1",
+    "react-router": "^8.5.1",
+    "tsdown": "^0.23.7",
     "typescript": "~6.0.3",
     "vite": "^8.3.7",
-    "vitest": "^5.1.0",
-    "@tsconfig/strictest": "^2.0.8",
-    "tsdown": "^0.23.7",
-    "react-router": "^8.5.1",
-    "react-dom": "^19.3.1",
-    "@vitejs/plugin-react": "^6.3.0",
-    "@types/react-dom": "^19.3.0"
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "minimatch": "^11.0.8",
