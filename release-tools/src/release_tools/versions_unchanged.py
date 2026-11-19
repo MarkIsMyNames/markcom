@@ -5,8 +5,8 @@ commit, whose first parent is main."""
 from pathlib import Path
 
 from git import Repo
+from markcom.config import ConfigError
 
-from release_tools.config import ConfigError
 from release_tools.constants import HEAD, MAIN_BEFORE_MERGE
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say

@@ -104,7 +104,8 @@ class Clone:
     def push_to_main(self, change: Callable[[], None]) -> None:
         """Commits what `change` does and pushes it to origin's main, as a merged PR lands."""
         change()
-        self.repo.git.commit("-a", "--allow-empty", "-m", "change")
+        self.repo.git.add("-A")
+        self.repo.git.commit("--allow-empty", "-m", "change")
         self.repo.git.push("origin", "HEAD:main")
 
     def tag_off_main(self, tag: str) -> None:

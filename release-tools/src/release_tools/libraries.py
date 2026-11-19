@@ -28,20 +28,21 @@ class VersionError(ValueError):
 
 class Library(ABC):
     """One library release.json lists. A release follows a change to its code: its `src` folder,
-    its manifest and any `extra_code` files, tests excluded."""
+    its manifest and any `extra_code` files, tests and test fixtures excluded."""
 
     manifest: ClassVar[str]
-    tests: ClassVar[str]
+    # glob patterns of its test files, relative to its folder
+    tests: ClassVar[tuple[str, ...]]
 
     def __init__(self, config: LibraryConfig) -> None:
         self.name = config.name
         self._folder = PurePosixPath(config.path)
         self._tag_prefix = config.tag_prefix
-        # git pathspecs from the repository root; an exclude pattern's * also matches /
+        # git pathspecs from the repository root; in a glob, **/ matches any depth, even none
         code = (CODE_FOLDER, self.manifest, *config.extra_code)
         self._code = (
             *(str(self._folder / path) for path in code),
-            f":(exclude){self._folder / self.tests}",
+            *(f":(exclude,glob){self._folder / pattern}" for pattern in self.tests),
         )
 
     def tag(self, version: Version) -> str:
@@ -89,7 +90,7 @@ class Library(ABC):
 
 class PythonLibrary(Library):
     manifest = PYPROJECT
-    tests = "*_test.py"
+    tests: ClassVar[tuple[str, ...]] = ("**/*_test.py", "**/conftest.py")
 
     @override
     def _version(self, manifest: str) -> str:
@@ -112,7 +113,7 @@ class PythonLibrary(Library):
 
 class NpmLibrary(Library):
     manifest = PACKAGE_JSON
-    tests = "*.test.ts"
+    tests: ClassVar[tuple[str, ...]] = ("**/*.test.ts",)
 
     @override
     def _version(self, manifest: str) -> str:

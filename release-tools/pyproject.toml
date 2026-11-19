@@ -5,7 +5,7 @@ description = "CI's release scripts for this repository's libraries: the version
 requires-python = ">=3.13"
 dependencies = [
     "gitpython>=3.2.1",
-    "pydantic>=2.14",
+    "markcom",
     "tomlkit>=0.15.2",
 ]
 
@@ -77,6 +77,9 @@ enable_error_code = ["deprecated", "exhaustive-match", "explicit-override", "ign
 [tool.bandit]
 # Test files only: assert is how tests work (code-testing allows this group exclusion).
 exclude_dirs = ["*_test.py", "conftest.py"]
+
+[tool.uv.sources]
+markcom = { git = "https://github.com/MarkIsMyNames/markcom", subdirectory = "markcom", tag = "markcom-v0.4.1" }
 
 [dependency-groups]
 dev = [

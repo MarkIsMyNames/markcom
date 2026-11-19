@@ -8,8 +8,8 @@ import os
 from pathlib import Path
 
 from git import GitCommandError, Repo
+from markcom.config import ConfigError
 
-from release_tools.config import ConfigError
 from release_tools.constants import ENCODING, HEAD, MAIN, PUSH_HEAD_TO_MAIN, REMOTE, REMOTE_MAIN
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say

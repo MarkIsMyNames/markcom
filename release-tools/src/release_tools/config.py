@@ -2,23 +2,10 @@
 
 from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, ValidationError
-
-from release_tools.constants import ENCODING
+from markcom.config import StrictModel, load_config
 
 RELEASE_CONFIG = "release.json"
-
-
-class ConfigError(ValueError):
-    """release.json is missing or invalid; the message names the file."""
-
-
-class StrictModel(BaseModel):
-    """Every field required, unknown keys rejected, immutable."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
 class LibraryKind(StrEnum):
@@ -43,12 +30,5 @@ class ReleaseConfig(StrictModel):
 
 
 def load_release_config(root: Path) -> ReleaseConfig:
-    path = root / RELEASE_CONFIG
-    try:
-        return ReleaseConfig.model_validate_json(path.read_text(encoding=ENCODING))
-    except FileNotFoundError as error:
-        message = f"{RELEASE_CONFIG}: file not found at the repository root"
-        raise ConfigError(message) from error
-    except ValidationError as error:
-        message = f"{RELEASE_CONFIG}: {error}"
-        raise ConfigError(message) from error
+    """Raises markcom's ConfigError, naming the file, when it is missing or invalid."""
+    return load_config(root / RELEASE_CONFIG, ReleaseConfig)
