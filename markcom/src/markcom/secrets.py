@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import ClassVar, Final, Self
 
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -8,6 +8,8 @@ from pydantic_settings.sources import DotenvType
 from markcom.config import ConfigError
 
 ENV_FILE: str = ".env"
+# Final, so mypy takes it as the literal key and still knows model_config's value type
+ENV_FILE_KEY: Final = "env_file"
 
 
 class BaseSecrets(BaseSettings):
@@ -24,7 +26,7 @@ class BaseSecrets(BaseSettings):
     def load(cls, env_dir: Path) -> Self:
         """Read env_file relative to `env_dir`, not the working directory: an app started from
         the desktop menu runs in the home folder."""
-        env_file: DotenvType | None = cls.model_config.get("env_file")
+        env_file: DotenvType | None = cls.model_config.get(ENV_FILE_KEY)
         # None (NoSecrets): no file to read
         if env_file is None:
             return cls()
