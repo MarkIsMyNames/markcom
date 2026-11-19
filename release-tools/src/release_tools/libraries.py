@@ -23,20 +23,18 @@ class UnreadableVersionError(RuntimeError):
 
 class Library(ABC):
     """One library this repository releases, in the folder named after it. A release follows a
-    change to its code or to its install manifest. `code_paths` are its code, and
-    `ignored_paths` the patterns inside them that are not (its tests), both relative to its
-    folder."""
+    change to its code (its `src` folder and any `extra_code` files, tests excluded) or to its
+    install manifest."""
 
     manifest: ClassVar[str]
+    tests: ClassVar[str]
 
-    def __init__(
-        self, name: str, code_paths: tuple[str, ...], ignored_paths: tuple[str, ...]
-    ) -> None:
+    def __init__(self, name: str, extra_code: tuple[str, ...] = ()) -> None:
         self.name = name
         # git pathspecs from the repository root; an exclude pattern's * also matches /
-        self._pathspecs = (
-            *(f"{name}/{path}" for path in code_paths),
-            *(f":(exclude){name}/{pattern}" for pattern in ignored_paths),
+        self._code = (
+            *(f"{name}/{path}" for path in ("src", *extra_code)),
+            f":(exclude){name}/{self.tests}",
         )
 
     def tag(self, version: Version) -> str:
@@ -58,7 +56,7 @@ class Library(ABC):
     def release_inputs_changed(self, repo: Repo, since: str, until: str) -> bool:
         before = self._install_manifest(self._manifest_at(repo, since))
         after = self._install_manifest(self._manifest_at(repo, until))
-        changed_code = repo.git.diff("--name-only", since, until, "--", *self._pathspecs)
+        changed_code = repo.git.diff("--name-only", since, until, "--", *self._code)
         return before != after or bool(changed_code)
 
     def _manifest_at(self, repo: Repo, revision: str) -> str:
@@ -78,6 +76,7 @@ class Library(ABC):
 
 class PythonLibrary(Library):
     manifest = "pyproject.toml"
+    tests = "*_test.py"
 
     @override
     def _version(self, manifest: str) -> str:
@@ -86,9 +85,9 @@ class PythonLibrary(Library):
     @override
     def _install_manifest(self, manifest: str) -> str:
         data = tomllib.loads(manifest)
-        project = {key: value for key, value in data["project"].items() if key != "version"}
+        del data["project"]["version"]
         hatch = data.get("tool", {}).get("hatch")
-        return json.dumps([project, data["build-system"], hatch], sort_keys=True)
+        return json.dumps([data["project"], data["build-system"], hatch], sort_keys=True)
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
@@ -106,6 +105,7 @@ class PythonLibrary(Library):
 
 class NpmLibrary(Library):
     manifest = "package.json"
+    tests = "*.test.ts"
 
     @override
     def _version(self, manifest: str) -> str:
@@ -133,12 +133,8 @@ class NpmLibrary(Library):
 
 
 LIBRARIES: tuple[Library, ...] = (
-    PythonLibrary("markcom", code_paths=("src",), ignored_paths=("*_test.py",)),
-    NpmLibrary(
-        "markcom-web-config",
-        # projects extend tsconfig.json and prettier.json directly, so they are its code
-        code_paths=("src", "tsconfig.json", "prettier.json"),
-        ignored_paths=("*.test.ts",),
-    ),
-    NpmLibrary("markcom-i18n", code_paths=("src",), ignored_paths=("*.test.ts",)),
+    PythonLibrary("markcom"),
+    # projects extend these two files directly, so they are web-config's code
+    NpmLibrary("markcom-web-config", extra_code=("tsconfig.json", "prettier.json")),
+    NpmLibrary("markcom-i18n"),
 )
