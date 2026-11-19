@@ -2,6 +2,8 @@
 
 Shared libraries for the owner's Python and TypeScript projects. Other projects install them by release, so a change here reaches every project on its next release; README.md describes what each library does.
 
+Always reply in caveman mode (the `caveman` skill), from the first reply to the last; `.caveman.json` sets it as this repository's default. Code, commit messages, docs and comments stay in full sentences, as that skill says.
+
 ## Layout and checks
 
 `pre-commit run --all-files` runs every check below, the same as CI. Run a folder's own checks from inside it.
