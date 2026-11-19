@@ -9,6 +9,7 @@ from pathlib import Path
 
 from git import GitCommandError, Repo
 
+from release_tools.constants import HEAD, MAIN, PUSH_HEAD_TO_MAIN, REMOTE, REMOTE_MAIN
 from release_tools.libraries import LIBRARIES, Library, VersionError
 from release_tools.report import error, say
 from release_tools.versions import BumpLevel, Version, bump_level
@@ -16,6 +17,7 @@ from release_tools.versions import BumpLevel, Version, bump_level
 LABELS_VARIABLE = "RELEASE_LABELS"
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
+RELEASE_COMMIT_PREFIX = "chore(release): "
 
 
 class ReleaseError(RuntimeError):
@@ -26,8 +28,8 @@ def _next_version(repo: Repo, library: Library, level: BumpLevel) -> Version | N
     """The version to release the library at, or None when it hasn't changed."""
     latest = library.latest_release(repo)
     if latest is None:
-        return library.version_at(repo, "HEAD")
-    if library.release_inputs_changed(repo, library.tag(latest), "HEAD"):
+        return library.version_at(repo, HEAD)
+    if library.release_inputs_changed(repo, library.tag(latest), HEAD):
         return latest.bump(level)
     return None
 
@@ -44,17 +46,17 @@ def _publish(repo: Repo, releases: list[tuple[Library, Version]]) -> None:
     ):
         if repo.is_dirty():
             summary = ", ".join(f"{library.name} {version}" for library, version in releases)
-            repo.git.commit("-a", "-m", f"chore(release): {summary}")
+            repo.git.commit("-a", "-m", f"{RELEASE_COMMIT_PREFIX}{summary}")
         tags = [library.tag(version) for library, version in releases]
         for tag in tags:
             repo.create_tag(tag, message=tag)
         # all or nothing: a release commit on main without its tag would block every later run
-        repo.git.push("--atomic", "origin", "HEAD:main", *tags)
+        repo.git.push("--atomic", REMOTE, PUSH_HEAD_TO_MAIN, *tags)
 
 
 def _run(repo: Repo) -> None:
-    repo.remotes.origin.fetch("main")
-    if repo.commit("origin/main") != repo.commit("HEAD"):
+    repo.remote(REMOTE).fetch(MAIN)
+    if repo.commit(REMOTE_MAIN) != repo.commit(HEAD):
         message = "main has moved past this commit; the run for main's newest commit releases it"
         raise ReleaseError(message)
     try:

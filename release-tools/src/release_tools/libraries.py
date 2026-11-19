@@ -8,8 +8,20 @@ import tomlkit
 from git import GitCommandError, Repo
 from tomlkit.items import AoT, Table
 
+from release_tools.constants import ENCODING, TAG_SEPARATOR, VERSION_KEY
 from release_tools.versions import InvalidVersionError, Version
 
+CODE_FOLDER = "src"
+PYPROJECT = "pyproject.toml"
+UV_LOCK = "uv.lock"
+PACKAGE_JSON = "package.json"
+PACKAGE_LOCK = "package-lock.json"
+PROJECT_TABLE = "project"
+NPM_SCRIPTS_KEY = "scripts"
+# package.json fields no installer reads
+NPM_DEV_ONLY_KEYS = ("devDependencies", "overrides")
+# npm's own formatting
+NPM_INDENT = 2
 # npm runs these when it packs, publishes or installs; the rest never reach a user
 SHIPPED_NPM_SCRIPTS = frozenset(
     {"build", "prepare", "prepack", "prepublishOnly", "preinstall", "install", "postinstall"}
@@ -32,12 +44,12 @@ class Library(ABC):
         self.name = name
         # git pathspecs from the repository root; an exclude pattern's * also matches /
         self._code = (
-            *(f"{name}/{path}" for path in ("src", *extra_code)),
+            *(f"{name}/{path}" for path in (CODE_FOLDER, *extra_code)),
             f":(exclude){name}/{self.tests}",
         )
 
     def tag(self, version: Version) -> str:
-        return f"{self.name}-v{version}"
+        return f"{self.name}{TAG_SEPARATOR}{version}"
 
     def version_at(self, repo: Repo, revision: str) -> Version:
         try:
@@ -53,7 +65,7 @@ class Library(ABC):
 
     def latest_release(self, repo: Repo) -> Version | None:
         """The highest version tagged, or None before its first release."""
-        prefix = f"{self.name}-v"
+        prefix = f"{self.name}{TAG_SEPARATOR}"
         tags = [tag.name for tag in repo.tags if tag.name.startswith(prefix)]
         return max((Version.parse(tag.removeprefix(prefix)) for tag in tags), default=None)
 
@@ -79,61 +91,61 @@ class Library(ABC):
 
 
 class PythonLibrary(Library):
-    manifest = "pyproject.toml"
+    manifest = PYPROJECT
     tests = "*_test.py"
 
     @override
     def _version(self, manifest: str) -> str:
-        return str(tomllib.loads(manifest)["project"]["version"])
+        return str(tomllib.loads(manifest)[PROJECT_TABLE][VERSION_KEY])
 
     @override
     def _install_manifest(self, manifest: str) -> str:
         data = tomllib.loads(manifest)
-        del data["project"]["version"]
+        del data[PROJECT_TABLE][VERSION_KEY]
         hatch = data.get("tool", {}).get("hatch")
-        return json.dumps([data["project"], data["build-system"], hatch], sort_keys=True)
+        return json.dumps([data[PROJECT_TABLE], data["build-system"], hatch], sort_keys=True)
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
         pyproject_path = root / self.name / self.manifest
-        pyproject = tomlkit.parse(pyproject_path.read_text(encoding="utf-8"))
-        cast("Table", pyproject["project"])["version"] = str(version)
-        pyproject_path.write_text(tomlkit.dumps(pyproject), encoding="utf-8")
-        lock_path = root / self.name / "uv.lock"
-        lock = tomlkit.parse(lock_path.read_text(encoding="utf-8"))
+        pyproject = tomlkit.parse(pyproject_path.read_text(encoding=ENCODING))
+        cast("Table", pyproject[PROJECT_TABLE])[VERSION_KEY] = str(version)
+        pyproject_path.write_text(tomlkit.dumps(pyproject), encoding=ENCODING)
+        lock_path = root / self.name / UV_LOCK
+        lock = tomlkit.parse(lock_path.read_text(encoding=ENCODING))
         for package in cast("AoT", lock["package"]):
             if package["name"] == self.name:
-                package["version"] = str(version)
-        lock_path.write_text(tomlkit.dumps(lock), encoding="utf-8")
+                package[VERSION_KEY] = str(version)
+        lock_path.write_text(tomlkit.dumps(lock), encoding=ENCODING)
 
 
 class NpmLibrary(Library):
-    manifest = "package.json"
+    manifest = PACKAGE_JSON
     tests = "*.test.ts"
 
     @override
     def _version(self, manifest: str) -> str:
-        return str(json.loads(manifest)["version"])
+        return str(json.loads(manifest)[VERSION_KEY])
 
     @override
     def _install_manifest(self, manifest: str) -> str:
         data = json.loads(manifest)
-        scripts = data.pop("scripts", {})
-        for key in ("version", "devDependencies", "overrides"):
+        scripts = data.pop(NPM_SCRIPTS_KEY, {})
+        for key in (VERSION_KEY, *NPM_DEV_ONLY_KEYS):
             data.pop(key, None)
-        data["scripts"] = {key: scripts[key] for key in scripts if key in SHIPPED_NPM_SCRIPTS}
+        data[NPM_SCRIPTS_KEY] = {key: scripts[key] for key in scripts if key in SHIPPED_NPM_SCRIPTS}
         return json.dumps(data, sort_keys=True)
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
-        for path in (root / self.name / self.manifest, root / self.name / "package-lock.json"):
-            data = json.loads(path.read_text(encoding="utf-8"))
-            data["version"] = str(version)
+        for path in (root / self.name / self.manifest, root / self.name / PACKAGE_LOCK):
+            data = json.loads(path.read_text(encoding=ENCODING))
+            data[VERSION_KEY] = str(version)
             # package-lock.json repeats the version in its root package entry
             if "packages" in data:
-                data["packages"][""]["version"] = str(version)
-            # npm's own formatting: two-space indent, final newline
-            path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                data["packages"][""][VERSION_KEY] = str(version)
+            text = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
+            path.write_text(f"{text}\n", encoding=ENCODING)
 
 
 LIBRARIES: tuple[Library, ...] = (

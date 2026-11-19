@@ -4,25 +4,24 @@ commit, whose first parent is main."""
 
 from git import Repo
 
+from release_tools.constants import HEAD, MAIN_BEFORE_MERGE
 from release_tools.libraries import LIBRARIES, Library, VersionError
 from release_tools.report import error, say
-
-MAIN = "HEAD^1"
-PULL_REQUEST = "HEAD"
+from release_tools.versions import ReleaseLabel
 
 
 def _check(repo: Repo, library: Library) -> bool:
     try:
-        before = library.version_at(repo, MAIN)
-        after = library.version_at(repo, PULL_REQUEST)
+        before = library.version_at(repo, MAIN_BEFORE_MERGE)
+        after = library.version_at(repo, HEAD)
     except VersionError as failure:
         error(str(failure))
         return False
     if after != before:
         error(
             f"{library.name}: version changed from {before} to {after}; CI sets versions, so "
-            "leave the version files alone and label the pull request release:minor or "
-            "release:major for a bigger bump than a patch"
+            f"leave the version files alone and label the pull request {ReleaseLabel.MINOR} or "
+            f"{ReleaseLabel.MAJOR} for a bigger bump than a patch"
         )
         return False
     say(f"{library.name}: {after}, unchanged")

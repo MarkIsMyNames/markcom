@@ -5,14 +5,19 @@ from enum import StrEnum
 from typing import Self, override
 
 VERSION_PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)")
-MINOR_LABEL = "release:minor"
-MAJOR_LABEL = "release:major"
 
 
 class InvalidVersionError(ValueError):
     def __init__(self, text: str) -> None:
         super().__init__(f"{text!r} is not a version of the form X.Y.Z")
         self.text = text
+
+
+class ReleaseLabel(StrEnum):
+    """Pull request labels that ask for more than a patch."""
+
+    MINOR = "release:minor"
+    MAJOR = "release:major"
 
 
 class BumpLevel(StrEnum):
@@ -24,9 +29,9 @@ class BumpLevel(StrEnum):
 def bump_level(labels: Iterable[str]) -> BumpLevel:
     """The bump a merged pull request's labels ask for; the larger wins."""
     names = set(labels)
-    if MAJOR_LABEL in names:
+    if ReleaseLabel.MAJOR in names:
         return BumpLevel.MAJOR
-    if MINOR_LABEL in names:
+    if ReleaseLabel.MINOR in names:
         return BumpLevel.MINOR
     return BumpLevel.PATCH
 
