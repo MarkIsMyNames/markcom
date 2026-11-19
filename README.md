@@ -42,8 +42,10 @@ npm install --save-dev @markcom/web-config
 
 CI does both on every push to `main`:
 
-- **markcom**: a version raised by hand in `markcom/pyproject.toml` (a minor or major release) is tagged `markcom-v<version>` as it is. Otherwise, if the source or `pyproject.toml` changed since the last release, CI tags the next patch version. Nothing is committed back to `main`.
-- **npm packages**: a version raised by hand in `package.json` is published as it is. Otherwise a changed package is published as the next patch version. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
+- **markcom**: a version raised by hand in `markcom/pyproject.toml` (a minor or major release) is tagged `markcom-v<version>` as it is. Otherwise, if the source or `pyproject.toml` changed since the last release, CI tags the next patch version.
+- **npm packages**: a version raised by hand in `package.json` is published as it is. Otherwise a changed package is published as the next patch version. `devDependencies`, `overrides` and `scripts` are dropped from `package.json` before packing, so a change to only those publishes nothing. CI signs in to npm by trusted publishing (OIDC), set up on each package's npm settings page for this repository and `ci.yml`, so no npm token is stored.
+
+After releasing, CI commits the released versions to `main` (`markcom/pyproject.toml`, `markcom/uv.lock`, each `package.json` and `package-lock.json`), so the repository always names the latest release. It never lowers a version raised by hand.
 
 ## Checks
 
