@@ -1,0 +1,87 @@
+[project]
+name = "release-tools"
+version = "0.1.0"
+description = "CI's release scripts for this repository's libraries: the version check on pull requests and the release on main."
+requires-python = ">=3.13"
+dependencies = [
+    "gitpython>=3.2.1",
+    "tomlkit>=0.15.2",
+]
+
+[project.scripts]
+version-increases = "release_tools.version_increases:main"
+release = "release_tools.release:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/release_tools"]
+exclude = ["**/*_test.py", "**/conftest.py"]
+
+# ---------- Tests: next to the code, named *_test.py ----------
+[tool.pytest.ini_options]
+testpaths = ["src"]
+python_files = ["*_test.py"]
+addopts = "--strict-markers --strict-config --cov=release_tools --cov-report=term-missing --cov-fail-under=85"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+omit = ["*_test.py", "*/conftest.py"]
+
+# ---------- Lint: every rule on ----------
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D",      # house rule: comments only where needed, so no docstring on every item
+    "COM812", # conflicts with the formatter (ruff docs)
+    "CPY001", # no copyright header in each file
+    "TC001",  # house rule: imports only at the top, never under `if TYPE_CHECKING:`
+    "TC002",  # house rule: imports only at the top, never under `if TYPE_CHECKING:`
+    "TC003",  # house rule: imports only at the top, never under `if TYPE_CHECKING:`
+]
+
+[tool.ruff.lint.per-file-ignores]
+"*_test.py" = [
+    "S101",    # assert is how pytest checks
+    "ANN",     # tests are exempt from annotations
+    "PLR2004", # tests are black box and use plain literals
+    "INP001",  # test files sit beside the code, not in a package of their own
+]
+"conftest.py" = [
+    "ANN",     # tests are exempt from annotations
+    "INP001",  # test files sit beside the code, not in a package of their own
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ---------- Types: strictest, tests excluded ----------
+[tool.mypy]
+strict = true
+python_version = "3.13"
+mypy_path = "src"
+packages = ["release_tools"]
+exclude = ['_test\.py$', 'conftest\.py$']
+warn_unreachable = true
+enable_error_code = ["deprecated", "exhaustive-match", "explicit-override", "ignore-without-code", "mutable-override", "possibly-undefined", "redundant-expr", "redundant-self", "truthy-bool", "truthy-iterable", "unimported-reveal", "unused-awaitable"]
+
+# ---------- Security scanner ----------
+[tool.bandit]
+# Test files only: assert is how tests work (code-testing allows this group exclusion).
+exclude_dirs = ["*_test.py", "conftest.py"]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9",
+    "mypy>=2.4",
+    "pip-audit>=2.10",
+    "pytest>=9.0",
+    "pytest-cov>=7.0",
+    "ruff>=0.17",
+]
