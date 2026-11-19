@@ -20,13 +20,15 @@ from starlette.status import WS_1008_POLICY_VIOLATION
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocketClose
 
+from markcom.web_scheme import WebScheme
+
 logger: logging.Logger = logging.getLogger(__name__)
 
 LOOPBACK: IPv4Address = IPv4Address(INADDR_LOOPBACK)
 # What browsers also call LOOPBACK.
 LOOPBACK_NAME: str = "localhost"
 # Loopback only, so no TLS.
-SCHEME: str = "http"
+SCHEME: WebScheme = WebScheme.HTTP
 HOST_HEADER: str = "host"
 ORIGIN_HEADER: str = "origin"
 
