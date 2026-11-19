@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-version-increases = "release_tools.version_increases:main"
+versions-unchanged = "release_tools.versions_unchanged:main"
 release = "release_tools.release:main"
 
 [build-system]
@@ -54,6 +54,7 @@ ignore = [
     "INP001",  # test files sit beside the code, not in a package of their own
 ]
 "conftest.py" = [
+    "S101",    # assert is how pytest checks
     "ANN",     # tests are exempt from annotations
     "INP001",  # test files sit beside the code, not in a package of their own
 ]

@@ -45,14 +45,53 @@ class Clone:
             encoding="utf-8",
         )
 
-    def set_npm_version(self, library: str, version: str) -> None:
-        manifest = self.path / library / "package.json"
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-        data["version"] = version
-        manifest.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    def set_npm_version(self, library: str, version: str, *, lock: bool = False) -> None:
+        """Sets package.json's version; with `lock`, package-lock.json's root entries too."""
+        self.edit_json(f"{library}/package.json", lambda data: data.update(version=version))
+        if lock:
+
+            def set_lock(data):
+                data["version"] = version
+                data["packages"][""]["version"] = version
+
+            self.edit_json(f"{library}/package-lock.json", set_lock)
+
+    def edit_json(self, relative: str, change: Callable[[dict], object]) -> None:
+        path = self.path / relative
+        data = json.loads(path.read_text(encoding="utf-8"))
+        change(data)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def append(self, relative: str, text: str) -> None:
+        with (self.path / relative).open("a", encoding="utf-8") as file:
+            file.write(text)
+
+    def replace(self, relative: str, old: str, new: str) -> None:
+        path = self.path / relative
+        text = path.read_text(encoding="utf-8")
+        assert old in text, f"{old!r} not in {relative}"
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
     def write(self, relative: str, text: str) -> None:
         (self.path / relative).write_text(text, encoding="utf-8")
+
+    def push_to_main(self, change: Callable[[], None]) -> None:
+        """Commits what `change` does and pushes it to origin's main, as a merged PR lands."""
+        change()
+        self.repo.git.commit("-a", "--allow-empty", "-m", "change")
+        self.repo.git.push("origin", "HEAD:main")
+
+    def origin_tags(self) -> set[str]:
+        return {tag.name for tag in self.origin.tags}
+
+    def origin_main(self):
+        return self.origin.commit("main")
+
+    def tagged_commit(self, tag: str):
+        return self.origin.tags[tag].commit
+
+    def file_at_origin_main(self, relative: str) -> str:
+        return self.origin.git.show(f"main:{relative}")
 
 
 @pytest.fixture
