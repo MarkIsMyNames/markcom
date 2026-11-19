@@ -4,9 +4,8 @@ commit, whose first parent is main."""
 
 from git import Repo
 
-from release_tools.libraries import LIBRARIES, Library, UnreadableVersionError
+from release_tools.libraries import LIBRARIES, Library, VersionError
 from release_tools.report import error, say
-from release_tools.versions import InvalidVersionError
 
 MAIN = "HEAD^1"
 PULL_REQUEST = "HEAD"
@@ -16,11 +15,8 @@ def _check(repo: Repo, library: Library) -> bool:
     try:
         before = library.version_at(repo, MAIN)
         after = library.version_at(repo, PULL_REQUEST)
-    except UnreadableVersionError:
-        error(f"could not read {library.name}'s version")
-        return False
-    except InvalidVersionError as invalid:
-        error(f"{library.name}: version {invalid.text} is not of the form X.Y.Z")
+    except VersionError as failure:
+        error(str(failure))
         return False
     if after != before:
         error(

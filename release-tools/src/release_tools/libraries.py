@@ -8,7 +8,7 @@ import tomlkit
 from git import GitCommandError, Repo
 from tomlkit.items import AoT, Table
 
-from release_tools.versions import Version
+from release_tools.versions import InvalidVersionError, Version
 
 # npm runs these when it packs, publishes or installs; the rest never reach a user
 SHIPPED_NPM_SCRIPTS = frozenset(
@@ -16,9 +16,8 @@ SHIPPED_NPM_SCRIPTS = frozenset(
 )
 
 
-class UnreadableVersionError(RuntimeError):
-    def __init__(self, library: str, revision: str) -> None:
-        super().__init__(f"could not read {library}'s version at {revision}")
+class VersionError(ValueError):
+    """A library's version is unreadable or not X.Y.Z; the message names the library."""
 
 
 class Library(ABC):
@@ -44,8 +43,13 @@ class Library(ABC):
         try:
             text = self._version(self._manifest_at(repo, revision))
         except (GitCommandError, ValueError, KeyError, TypeError) as error:
-            raise UnreadableVersionError(self.name, revision) from error
-        return Version.parse(text)
+            message = f"could not read {self.name}'s version at {revision}"
+            raise VersionError(message) from error
+        try:
+            return Version.parse(text)
+        except InvalidVersionError as error:
+            message = f"{self.name}: version {text} is not of the form X.Y.Z"
+            raise VersionError(message) from error
 
     def latest_release(self, repo: Repo) -> Version | None:
         """The highest version tagged, or None before its first release."""
