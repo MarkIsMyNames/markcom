@@ -52,7 +52,7 @@ repos:
       - id: uv-lock-check
         name: uv.lock matches pyproject.toml
         # CI's uv sync --locked fails on a stale lock; this catches it before the commit.
-        entry: bash -c 'uv lock --check --quiet --directory markcom'
+        entry: bash -c 'uv lock --check --quiet --directory markcom && uv lock --check --quiet --directory release-tools'
         language: system
         files: (^|/)(pyproject\.toml|uv\.lock)$
         pass_filenames: false
@@ -95,6 +95,48 @@ repos:
       - id: markcom-unit-tests
         name: "markcom: Unit tests with coverage gate"
         entry: bash -c 'cd markcom && uv run pytest -q -p no:cacheprovider'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: release-tools-lint
+        name: "release-tools: Lint"
+        entry: bash -c 'cd release-tools && uv run ruff check .'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: release-tools-format
+        name: "release-tools: Format check"
+        entry: bash -c 'cd release-tools && uv run ruff format --check .'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: release-tools-types
+        name: "release-tools: Strict type check"
+        entry: bash -c 'cd release-tools && uv run mypy src'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: release-tools-language-scanner
+        name: "release-tools: Language security scanner"
+        entry: bash -c 'cd release-tools && uv run bandit -q -r src -c pyproject.toml'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: release-tools-audit
+        name: "release-tools: Dependency audit"
+        entry: bash -c 'cd release-tools && uv run pip-audit --skip-editable'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: release-tools-unit-tests
+        name: "release-tools: Unit tests with coverage gate"
+        entry: bash -c 'cd release-tools && uv run pytest -q -p no:cacheprovider'
         language: system
         pass_filenames: false
         always_run: true
