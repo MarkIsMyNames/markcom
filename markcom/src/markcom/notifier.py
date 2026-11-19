@@ -53,7 +53,7 @@ class DesktopNotifier:
         try:
             self._backend = _open_backend(app_name, icon, desktop_entry)
         except BACKEND_ERRORS:
-            logger.warning("desktop notifications unavailable", exc_info=True)
+            logger.exception("desktop notifications unavailable")
             self._backend = None
         else:
             logger.info("desktop notifications through %s", type(self._backend).__name__)
