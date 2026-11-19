@@ -1,17 +1,27 @@
 import { match } from '@formatjs/intl-localematcher';
-import { flattenObject } from 'es-toolkit';
 import type { ParseKeys } from 'i18next';
 
 export type LocaleValue = string | LocaleRecord;
 export type LocaleRecord = { readonly [key: string]: LocaleValue };
 
-/** Every dotted key path that ends in a string, with its string. */
-function flattenLocale(locale: LocaleRecord): ReadonlyMap<string, string> {
-  return new Map(
-    Object.entries(flattenObject(locale)).filter(
-      (entry: [string, unknown]): entry is [string, string] => typeof entry[1] === 'string',
-    ),
+/** Joins a key to the path of the record it sits in. */
+const KEY_SEPARATOR: string = '.';
+/** The path of the top-level record. */
+const ROOT_PATH: string = '';
+
+/** Every string under `locale`, keyed by `prefix` plus its dotted key path. */
+function stringLeaves(locale: LocaleRecord, prefix: string): [string, string][] {
+  return Object.entries(locale).flatMap(
+    ([key, value]: [string, LocaleValue]): [string, string][] =>
+      typeof value === 'string' ?
+        [[`${prefix}${key}`, value]]
+      : stringLeaves(value, `${prefix}${key}${KEY_SEPARATOR}`),
   );
+}
+
+/** Every dotted key path that ends in a string, with its string. */
+export function flattenLocale(locale: LocaleRecord): ReadonlyMap<string, string> {
+  return new Map(stringLeaves(locale, ROOT_PATH));
 }
 
 /** The string at a dotted key path; throws if missing or not a string. */
