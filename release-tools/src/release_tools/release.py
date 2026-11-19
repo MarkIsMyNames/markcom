@@ -56,7 +56,8 @@ def _publish(repo: Repo, releases: list[tuple[Library, Version]], config: ToolCo
         repo.git.push("--atomic", REMOTE, PUSH_HEAD_TO_MAIN, *tags)
 
 
-def _run(repo: Repo, config: ToolConfig) -> None:
+def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
+    repo = Repo(search_parent_directories=True)
     repo.remote(REMOTE).fetch(MAIN)
     if repo.commit(REMOTE_MAIN) != repo.commit(HEAD):
         message = "main has moved past this commit; the run for main's newest commit releases it"
@@ -89,14 +90,10 @@ def _report_tags(tags: list[str]) -> None:
             file.write(f"tags={' '.join(tags)}\n")
 
 
-def _main(config: ToolConfig, _secrets: NoSecrets) -> int:
+def main() -> int:
     try:
-        _run(Repo(search_parent_directories=True), config)
+        run(_release, CONFIG_PATH, ToolConfig, NoSecrets)
     except (ReleaseError, ConfigError, VersionError, GitCommandError) as failure:
         error(f"release failed: {failure}")
         return 1
     return 0
-
-
-def main() -> int:
-    return run(_main, CONFIG_PATH, ToolConfig, NoSecrets)

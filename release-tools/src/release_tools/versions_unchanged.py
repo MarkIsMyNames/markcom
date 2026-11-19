@@ -35,16 +35,18 @@ def _check(repo: Repo, library: Library, labels: Labels) -> bool:
     return True
 
 
-def _main(config: ToolConfig, _secrets: NoSecrets) -> int:
+def _check_all(config: ToolConfig, _secrets: NoSecrets) -> bool:
     repo = Repo(search_parent_directories=True)
-    try:
-        libraries = load_libraries(Path(repo.working_dir), config.release_config)
-    except ConfigError as failure:
-        error(str(failure))
-        return 1
+    libraries = load_libraries(Path(repo.working_dir), config.release_config)
+    # every library is checked and reported, not just those up to the first failure
     results = [_check(repo, library, config.labels) for library in libraries]
-    return 0 if all(results) else 1
+    return all(results)
 
 
 def main() -> int:
-    return run(_main, CONFIG_PATH, ToolConfig, NoSecrets)
+    try:
+        unchanged = run(_check_all, CONFIG_PATH, ToolConfig, NoSecrets)
+    except ConfigError as failure:
+        error(str(failure))
+        return 1
+    return 0 if unchanged else 1
