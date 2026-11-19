@@ -78,7 +78,9 @@ class UiServer(AbstractContextManager["UiServer"]):
             timeout_graceful_shutdown=CONFIG.ui_server.shutdown_grace_sec,
         )
         self._socket: socket = settings.bind_socket()
-        logger.debug("bound %s", self._socket.getsockname())
+        # bind_socket doesn't listen; uvicorn would on its thread, refusing connections until then
+        self._socket.listen()
+        logger.debug("listening on %s", self._socket.getsockname())
         self._server: uvicorn.Server = uvicorn.Server(settings)
         self._thread: threading.Thread = threading.Thread(
             target=self._server.run, kwargs={"sockets": [self._socket]}, name="ui"

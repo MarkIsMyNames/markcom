@@ -58,3 +58,10 @@ def test_leaving_stops_the_server_with_a_browser_still_connected():
     caller.start()
     caller.join(STOP_WAIT_SEC)
     assert left.is_set()
+
+
+def test_a_browser_connecting_before_the_server_thread_runs_is_not_refused():
+    port = free_port()
+    server = UiServer(root, "App", LOOPBACK, port)
+    with socket.create_connection(("127.0.0.1", port), timeout=STOP_WAIT_SEC), server:
+        pass
