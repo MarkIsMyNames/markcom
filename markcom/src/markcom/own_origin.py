@@ -7,7 +7,6 @@ every request, page and websocket alike, stops both.
 """
 
 import logging
-from enum import StrEnum
 from http import HTTPStatus
 from http.client import HTTP_PORT
 from ipaddress import IPv4Address
@@ -20,7 +19,7 @@ from starlette.status import WS_1008_POLICY_VIOLATION
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocketClose
 
-from markcom.web_scheme import WebScheme
+from markcom.web_scheme import HOST_HEADER, ORIGIN_HEADER, ScopeType, WebScheme
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -29,15 +28,6 @@ LOOPBACK: IPv4Address = IPv4Address(INADDR_LOOPBACK)
 LOOPBACK_NAME: str = "localhost"
 # Loopback only, so no TLS.
 SCHEME: WebScheme = WebScheme.HTTP
-HOST_HEADER: str = "host"
-ORIGIN_HEADER: str = "origin"
-
-
-class ScopeType(StrEnum):
-    """The ASGI scope types the guard checks; any other (lifespan) passes straight through."""
-
-    HTTP = "http"
-    WEBSOCKET = "websocket"
 
 
 class InvalidPortError(ValueError): ...
