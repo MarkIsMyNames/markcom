@@ -81,3 +81,22 @@ def test_returns_what_main_returns(config_path):
         secrets_model=ExampleSecrets,
     )
     assert result == "Dia duit"
+
+
+def test_reads_the_dotenv_file_beside_the_config_not_the_working_directory(
+    config_path, monkeypatch, tmp_path
+):
+    monkeypatch.delenv("API_TOKEN")
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "config.json").write_text(config_path.read_text(encoding="utf-8"), encoding="utf-8")
+    (app / ".env").write_text("API_TOKEN=beside-config\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("API_TOKEN=working-directory\n", encoding="utf-8")
+    received = []
+    run(
+        lambda _config, secrets: received.append(secrets.api_token.get_secret_value()),
+        config_path=app / "config.json",
+        config_model=ExampleConfig,
+        secrets_model=ExampleSecrets,
+    )
+    assert received == ["beside-config"]

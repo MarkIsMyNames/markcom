@@ -30,12 +30,16 @@ class DesktopNotifierBackend(NotificationBackend):
 
     @override
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
+        logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
         self._notifier.send(title=title, message=message, urgency=urgency, timeout=display_sec)
 
 
 def _open_backend(app_name: str, icon: Path, desktop_entry: str | None) -> NotificationBackend:
-    if platform.system() == LINUX:
+    system: str = platform.system()
+    if system == LINUX:
+        logger.debug("%s: notifications over D-Bus", system)
         return freedesktop.open_backend(app_name, icon, desktop_entry)
+    logger.debug("%s: notifications through desktop-notifier", system)
     return DesktopNotifierBackend(app_name, icon)
 
 
@@ -51,13 +55,16 @@ class DesktopNotifier:
         except BACKEND_ERRORS:
             logger.exception("desktop notifications unavailable")
             self._backend = None
+        else:
+            logger.info("desktop notifications through %s", type(self._backend).__name__)
 
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         """Show a notification for `display_sec`; NEVER_EXPIRES_SEC (0) keeps it until the user
         dismisses it."""
         if self._backend is None:
+            logger.debug("no notification backend, so %r is dropped", title)
             return
         try:
             self._backend.send(title, message, urgency, display_sec)
-        except BACKEND_ERRORS as error:
-            logger.warning("desktop notification failed: %s", error)
+        except BACKEND_ERRORS:
+            logger.exception("desktop notification failed")

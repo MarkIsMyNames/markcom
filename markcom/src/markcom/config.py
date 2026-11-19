@@ -89,12 +89,27 @@ class WindowConfig(StrictModel):
     height: Pixels
 
 
+type Seconds = Annotated[float, Field(gt=0)]
+type Count = Annotated[int, Field(ge=0)]
+
+
+class UiServerConfig(StrictModel):
+    """The NiceGUI server's settings that ui.run would otherwise take."""
+
+    # Seconds open connections (the window's websocket) get to close on leaving.
+    shutdown_grace_sec: Count
+    # Seconds between NiceGUI's checks of bound values.
+    binding_refresh_sec: Seconds
+    reconnect_timeout_sec: Seconds
+
+
 class MarkcomConfig(StrictModel):
     log_format: LogFormat
     # Names the app a written .desktop file belongs to, so no other file is ever taken over.
     desktop_entry_owner_key: str
     tray: TrayConfig
     window: WindowConfig
+    ui_server: UiServerConfig
 
 
 CONFIG: MarkcomConfig = load_config(CONFIG_PATH, MarkcomConfig)

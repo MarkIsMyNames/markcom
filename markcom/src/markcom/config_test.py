@@ -4,7 +4,15 @@ from pathlib import Path
 import pytest
 from pydantic import HttpUrl
 
-from markcom.config import BaseAppConfig, ConfigError, LogFormat, StrictModel, load_config
+from markcom.config import (
+    CONFIG_PATH,
+    BaseAppConfig,
+    ConfigError,
+    LogFormat,
+    MarkcomConfig,
+    StrictModel,
+    load_config,
+)
 
 
 class ExampleConfig(BaseAppConfig):
@@ -78,3 +86,10 @@ def test_accepts_a_valid_log_format(tmp_path):
 def test_rejects_an_invalid_log_format(tmp_path, log_format):
     with pytest.raises(ConfigError):
         load_config(write(tmp_path, {"log_format": log_format}), FormatConfig)
+
+
+def test_markcom_config_without_its_ui_server_section_is_rejected(tmp_path):
+    content = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    del content["ui_server"]
+    with pytest.raises(ConfigError):
+        load_config(write(tmp_path, content), MarkcomConfig)

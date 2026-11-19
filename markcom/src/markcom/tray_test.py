@@ -1,6 +1,9 @@
+import logging
 import os
+import platform
 import threading
 from contextlib import ExitStack
+from pathlib import Path
 from typing import override
 
 import pytest
@@ -9,13 +12,16 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+from markcom import notifier as notifier_module
 from markcom.config import CONFIG
-from markcom.tray import Tray, TrayAction, TrayTarget
+from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
+from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
 
 # No display is needed: Qt draws off screen.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 WAIT_SEC = 2
+app_log = logging.getLogger("app")
 
 
 class SentNotifications(list):
@@ -68,7 +74,10 @@ def make_tray(tmp_path):
         stack.callback(app.shutdown)
 
         def make(notifier=None, target=None, actions=()):
-            return stack.enter_context(Tray(app, icon, notifier, target or FakeWindow(), actions))
+            notifications = None if notifier is None else TrayNotifications(notifier, 8)
+            return stack.enter_context(
+                Tray(app, icon, notifications, target or FakeWindow(), actions)
+            )
 
         yield make
 
@@ -186,3 +195,144 @@ def test_the_icon_shows_until_the_tray_is_left(tmp_path):
 def test_the_tray_does_not_quit_when_its_last_window_closes(make_tray):
     make_tray()
     assert not QApplication.instance().quitOnLastWindowClosed()
+
+
+@pytest.mark.parametrize(
+    ("level", "urgency", "display_sec"),
+    [
+        (logging.ERROR, Urgency.Normal, 8),
+        (logging.CRITICAL, Urgency.Critical, NEVER_EXPIRES_SEC),
+    ],
+)
+def test_error_and_critical_records_are_sent(make_tray, level, urgency, display_sec):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    app_log.log(level, "cannot read %s", "feed")
+    assert [(message, u, d) for _, message, u, d in sent] == [
+        ("cannot read feed", urgency, display_sec)
+    ]
+
+
+def fail_with(error):
+    raise error
+
+
+@pytest.mark.parametrize(
+    ("error", "body"),
+    [
+        pytest.param(
+            OSError("connection refused"),
+            "cannot read feed: OSError: connection refused",
+            id="message",
+        ),
+        pytest.param(TimeoutError(), "cannot read feed: TimeoutError", id="no-message"),
+        pytest.param(
+            ExceptionGroup("2 reads failed", [OSError("refused"), TimeoutError("slow")]),
+            "cannot read feed: ExceptionGroup: 2 reads failed (2 sub-exceptions)\n"
+            "   OSError: refused\n"
+            "   TimeoutError: slow",
+            id="group",
+        ),
+    ],
+)
+def test_a_record_with_an_exception_shows_it_but_not_the_traceback(make_tray, error, body):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    try:
+        fail_with(error)
+    except (OSError, ExceptionGroup):
+        app_log.exception("cannot read %s", "feed")
+    assert [message for _, message, _, _ in sent] == [body]
+
+
+@pytest.mark.parametrize("level", [logging.DEBUG, logging.INFO, logging.WARNING])
+def test_records_below_error_are_not_sent(make_tray, level):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    app_log.log(level, "fine")
+    assert sent == []
+
+
+def test_a_repeated_error_is_sent_each_time(make_tray):
+    sent = SentNotifications()
+    make_tray(notifier=sent)
+    app_log.error("down")
+    app_log.error("down")
+    assert len(sent) == 2
+
+
+def test_a_tray_without_a_notifier_does_not_fail_on_error_records(make_tray):
+    make_tray()
+    app_log.error("down")
+
+
+def test_records_are_not_sent_once_the_tray_is_left(tmp_path):
+    icon_path = tmp_path / "icon.png"
+    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    sent = SentNotifications()
+    with ExitStack() as stack:
+        app = QApplication(["App"])
+        stack.callback(app.shutdown)
+        with Tray(app, icon_path, TrayNotifications(sent, 8), FakeWindow(), ()):
+            pass
+        app_log.error("after")
+    assert sent == []
+
+
+class ArrivingNotifications(SentNotifications):
+    """Also signals each arrival, for notifications sent from the tray's worker."""
+
+    def __init__(self):
+        super().__init__()
+        self.arrived = threading.Event()
+
+    def send(self, title, message, urgency, display_sec):
+        super().send(title, message, urgency, display_sec)
+        self.arrived.set()
+
+
+@pytest.mark.parametrize("error", [KeyError("feed"), OSError("xdg-open missing")])
+def test_a_failed_action_is_sent_as_one_notification(make_tray, error):
+    sent = ArrivingNotifications()
+
+    def broken():
+        raise error
+
+    make_tray(notifier=sent, actions=[TrayAction("Open", broken)])
+    icon().contextMenu().actions()[0].trigger()
+    assert sent.arrived.wait(WAIT_SEC)
+    assert [urgency for _, _, urgency, _ in sent] == [Urgency.Normal]
+
+
+class FailingNotifications:
+    """DesktopNotifier stand-in with a bug: every send raises."""
+
+    def send(self, *_):
+        bug = "backend bug"
+        raise TypeError(bug)
+
+
+def test_a_failing_notifier_does_not_break_the_apps_logging(make_tray):
+    make_tray(notifier=FailingNotifications())
+    app_log.error("down")
+
+
+class GoneBus:
+    """DesktopNotifierSync stand-in whose notification service is gone: counts each attempt."""
+
+    def __init__(self):
+        self.attempts = 0
+
+    def send(self, **_):
+        self.attempts += 1
+        gone = "bus gone"
+        raise OSError(gone)
+
+
+def test_a_failed_notification_is_not_itself_sent_as_a_notification(make_tray, monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    bus = GoneBus()
+    monkeypatch.setattr(notifier_module, "DesktopNotifierSync", lambda **_: bus)
+    make_tray(notifier=DesktopNotifier("App", Path("app.png")))
+    app_log.error("down")
+    assert bus.attempts == 1
