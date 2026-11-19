@@ -8,8 +8,10 @@ import os
 from pathlib import Path
 
 from git import GitCommandError, Repo
+from markcom import NoSecrets, run
 from markcom.config import ConfigError
 
+from release_tools.config import CONFIG_PATH, ToolConfig
 from release_tools.constants import ENCODING, HEAD, MAIN, PUSH_HEAD_TO_MAIN, REMOTE, REMOTE_MAIN
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
@@ -18,9 +20,6 @@ from release_tools.versions import BumpLevel, Version, bump_level
 LABELS_VARIABLE = "RELEASE_LABELS"
 # set in GitHub Actions: the file a step writes its outputs to
 OUTPUT_VARIABLE = "GITHUB_OUTPUT"
-BOT_NAME = "github-actions[bot]"
-BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
-RELEASE_COMMIT_PREFIX = "chore(release): "
 
 
 class ReleaseError(RuntimeError):
@@ -37,19 +36,19 @@ def _next_version(repo: Repo, library: Library, level: BumpLevel) -> Version | N
     return None
 
 
-def _publish(repo: Repo, releases: list[tuple[Library, Version]]) -> None:
+def _publish(repo: Repo, releases: list[tuple[Library, Version]], config: ToolConfig) -> None:
     """Commits any version files that changed, tags every release, and pushes it all at once."""
     for library, version in releases:
         library.write_version(Path(repo.working_dir), version)
     with repo.git.custom_environment(
-        GIT_AUTHOR_NAME=BOT_NAME,
-        GIT_AUTHOR_EMAIL=BOT_EMAIL,
-        GIT_COMMITTER_NAME=BOT_NAME,
-        GIT_COMMITTER_EMAIL=BOT_EMAIL,
+        GIT_AUTHOR_NAME=config.bot.name,
+        GIT_AUTHOR_EMAIL=config.bot.email,
+        GIT_COMMITTER_NAME=config.bot.name,
+        GIT_COMMITTER_EMAIL=config.bot.email,
     ):
         if repo.is_dirty():
             summary = ", ".join(f"{library.name} {version}" for library, version in releases)
-            repo.git.commit("-a", "-m", f"{RELEASE_COMMIT_PREFIX}{summary}")
+            repo.git.commit("-a", "-m", f"{config.release_commit_prefix}{summary}")
         tags = [library.tag(version) for library, version in releases]
         for tag in tags:
             repo.create_tag(tag, message=tag)
@@ -57,25 +56,25 @@ def _publish(repo: Repo, releases: list[tuple[Library, Version]]) -> None:
         repo.git.push("--atomic", REMOTE, PUSH_HEAD_TO_MAIN, *tags)
 
 
-def _run(repo: Repo) -> None:
+def _run(repo: Repo, config: ToolConfig) -> None:
     repo.remote(REMOTE).fetch(MAIN)
     if repo.commit(REMOTE_MAIN) != repo.commit(HEAD):
         message = "main has moved past this commit; the run for main's newest commit releases it"
         raise ReleaseError(message)
     try:
-        level = bump_level(os.environ[LABELS_VARIABLE].splitlines())
+        level = bump_level(os.environ[LABELS_VARIABLE].splitlines(), config.labels)
     except KeyError as missing:
         message = f"{LABELS_VARIABLE} must hold the merged pull request's labels, one per line"
         raise ReleaseError(message) from missing
     releases = []
-    for library in load_libraries(Path(repo.working_dir)):
+    for library in load_libraries(Path(repo.working_dir), config.release_config):
         version = _next_version(repo, library, level)
         if version is not None:
             releases.append((library, version))
     if not releases:
         say("nothing to release")
         return
-    _publish(repo, releases)
+    _publish(repo, releases, config)
     for library, version in releases:
         say(f"released {library.name} {version}")
     _report_tags([library.tag(version) for library, version in releases])
@@ -90,10 +89,14 @@ def _report_tags(tags: list[str]) -> None:
             file.write(f"tags={' '.join(tags)}\n")
 
 
-def main() -> int:
+def _main(config: ToolConfig, _secrets: NoSecrets) -> int:
     try:
-        _run(Repo(search_parent_directories=True))
+        _run(Repo(search_parent_directories=True), config)
     except (ReleaseError, ConfigError, VersionError, GitCommandError) as failure:
         error(f"release failed: {failure}")
         return 1
     return 0
+
+
+def main() -> int:
+    return run(_main, CONFIG_PATH, ToolConfig, NoSecrets)

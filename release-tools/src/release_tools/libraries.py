@@ -137,6 +137,7 @@ KINDS: dict[LibraryKind, type[Library]] = {
 }
 
 
-def load_libraries(root: Path) -> tuple[Library, ...]:
-    """The libraries the release.json at `root` lists."""
-    return tuple(KINDS[library.kind](library) for library in load_release_config(root).libraries)
+def load_libraries(root: Path, file_name: str) -> tuple[Library, ...]:
+    """The libraries the release config at `root` lists."""
+    config = load_release_config(root, file_name)
+    return tuple(KINDS[library.kind](library) for library in config.libraries)

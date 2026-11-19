@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Self, override
 
+from release_tools.config import Labels
+
 VERSION_PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 
@@ -13,25 +15,18 @@ class InvalidVersionError(ValueError):
         self.text = text
 
 
-class ReleaseLabel(StrEnum):
-    """Pull request labels that ask for more than a patch."""
-
-    MINOR = "release:minor"
-    MAJOR = "release:major"
-
-
 class BumpLevel(StrEnum):
     PATCH = "patch"
     MINOR = "minor"
     MAJOR = "major"
 
 
-def bump_level(labels: Iterable[str]) -> BumpLevel:
-    """The bump a merged pull request's labels ask for; the larger wins."""
-    names = set(labels)
-    if ReleaseLabel.MAJOR in names:
+def bump_level(names: Iterable[str], labels: Labels) -> BumpLevel:
+    """The bump a merged pull request's label names ask for; the larger wins."""
+    given = set(names)
+    if labels.major in given:
         return BumpLevel.MAJOR
-    if ReleaseLabel.MINOR in names:
+    if labels.minor in given:
         return BumpLevel.MINOR
     return BumpLevel.PATCH
 
