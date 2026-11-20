@@ -1,12 +1,10 @@
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Self, override
 
 from release_tools.config import Labels
-
-VERSION_PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+from release_tools.constants import VERSION_PATTERN
 
 
 class InvalidVersionError(ValueError):

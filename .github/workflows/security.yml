@@ -1,9 +1,4 @@
-# Secret and code scanning shared by every repository. Call it from a CI workflow:
-#   security:
-#     uses: MarkIsMyNames/markcom/.github/workflows/security.yml@<commit sha> # main
-#     permissions:
-#       contents: read
-#       pull-requests: read
+# Shared, so every repository scans for secrets and code issues the same way.
 name: Security
 
 on:

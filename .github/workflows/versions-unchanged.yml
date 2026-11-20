@@ -1,11 +1,4 @@
-# Fails a pull request that changes the version of a library its repository's release.json
-# lists: the release workflow writes every version. A repository calls it on pull requests:
-#
-#   versions-unchanged:
-#     if: github.event_name == 'pull_request'
-#     uses: MarkIsMyNames/markcom/.github/workflows/versions-unchanged.yml@<commit sha> # release-tools-v<version>
-#     permissions:
-#       contents: read
+# The release workflow writes every version, so a branch must leave versions alone.
 name: Versions unchanged
 
 on:
@@ -13,14 +6,16 @@ on:
 
 jobs:
   versions-unchanged:
+    # Only a branch off main has versions to compare with main's.
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The pull request's merge commit and its first parent, main as it is now.
-          fetch-depth: 2
+          # Every commit, to find where the branch left main.
+          fetch-depth: 0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}

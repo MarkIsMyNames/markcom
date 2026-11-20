@@ -9,17 +9,18 @@ from git import GitCommandError, Repo
 from tomlkit.items import AoT, Table
 
 from release_tools.config import LibraryConfig, LibraryKind, load_release_config
-from release_tools.constants import ENCODING, VERSION_KEY
+from release_tools.constants import (
+    CODE_FOLDER,
+    ENCODING,
+    NPM_INDENT,
+    PACKAGE_JSON,
+    PACKAGE_LOCK,
+    PROJECT_TABLE,
+    PYPROJECT,
+    UV_LOCK,
+    VERSION_KEY,
+)
 from release_tools.versions import InvalidVersionError, Version
-
-CODE_FOLDER = "src"
-PYPROJECT = "pyproject.toml"
-UV_LOCK = "uv.lock"
-PACKAGE_JSON = "package.json"
-PACKAGE_LOCK = "package-lock.json"
-PROJECT_TABLE = "project"
-# npm's own formatting
-NPM_INDENT = 2
 
 
 class VersionError(ValueError):

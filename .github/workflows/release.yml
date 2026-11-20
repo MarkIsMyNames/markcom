@@ -1,16 +1,4 @@
-# Releases the libraries a repository's release.json lists, using release-tools from the same
-# markcom commit as this workflow. A repository calls it once its checks pass, pinned like the
-# security workflow:
-#
-#   release:
-#     needs: [<check jobs>]
-#     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-#     uses: MarkIsMyNames/markcom/.github/workflows/release.yml@<commit sha> # release-tools-v<version>
-#     permissions:
-#       contents: write
-#       pull-requests: read
-#
-# Its `tags` output lists the tags it released, for jobs that publish or deploy them.
+# Shared, so every repository releases the same way, with release-tools from this workflow's commit.
 name: Release
 
 on:
@@ -37,8 +25,7 @@ jobs:
         with:
           # Every commit and tag, to compare against each library's latest release.
           fetch-depth: 0
-      # release-tools from the markcom commit this workflow came from; left untracked, so the
-      # release commit never includes it
+      # Left untracked, so the release commit never includes release-tools.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}

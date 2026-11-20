@@ -1,6 +1,5 @@
-"""Pull request check: fails when a pull request changes a library's version. CI writes every
-version when it releases, sized by the pull request's labels. Run at GitHub's pull request merge
-commit, whose first parent is main."""
+"""Fails when a branch has changed a library's version since it left main: CI sets every version
+when it releases."""
 
 from pathlib import Path
 
@@ -9,18 +8,23 @@ from markcom import NoSecrets, run
 from markcom.config import ConfigError
 
 from release_tools.config import CONFIG_PATH, Labels, ToolConfig
-from release_tools.constants import HEAD, MAIN_BEFORE_MERGE
+from release_tools.constants import HEAD, REMOTE_MAIN
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
 
 
-def _check(repo: Repo, library: Library, labels: Labels) -> bool:
+def _base(repo: Repo) -> str:
+    # At a pull request's merge commit this is its first parent; at a branch head, its fork point.
+    return repo.merge_base(HEAD, REMOTE_MAIN)[0].hexsha
+
+
+def _check(repo: Repo, library: Library, labels: Labels, base: str) -> bool:
     try:
         after = library.version_at(repo, HEAD)
-        if not library.exists_at(repo, MAIN_BEFORE_MERGE):
+        if not library.exists_at(repo, base):
             say(f"{library.name}: {after}, new")
             return True
-        before = library.version_at(repo, MAIN_BEFORE_MERGE)
+        before = library.version_at(repo, base)
     except VersionError as failure:
         error(str(failure))
         return False
@@ -38,8 +42,9 @@ def _check(repo: Repo, library: Library, labels: Labels) -> bool:
 def _check_all(config: ToolConfig, _secrets: NoSecrets) -> bool:
     repo = Repo(search_parent_directories=True)
     libraries = load_libraries(Path(repo.working_dir), config.release_config)
+    base = _base(repo)
     # every library is checked and reported, not just those up to the first failure
-    results = [_check(repo, library, config.labels) for library in libraries]
+    results = [_check(repo, library, config.labels, base) for library in libraries]
     return all(results)
 
 
