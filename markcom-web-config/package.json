@@ -1,6 +1,6 @@
 {
   "name": "@markcom/web-config",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Shared ESLint, Prettier, TypeScript, Vitest coverage and Playwright settings for the react-ui websites.",
   "license": "MIT",
   "repository": {
