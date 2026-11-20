@@ -125,7 +125,7 @@ def icon(tmp_path):
 
 
 def spec_for(url, icon):
-    return WindowSpec(title="App", url=HttpUrl(url), icon=Path(icon), log_level="WARNING")
+    return WindowSpec(title="App", url=HttpUrl(url), icon=Path(icon))
 
 
 @pytest.fixture

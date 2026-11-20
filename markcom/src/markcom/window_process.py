@@ -99,7 +99,7 @@ class OwnOriginWindow(QMainWindow):
 
 def main() -> None:
     spec: WindowSpec = WindowSpec.model_validate_json(os.environ.pop(SPEC_VARIABLE))
-    configure_logging(spec.log_level)
+    configure_logging(logging.getLevelName(logging.WARNING))
     app: QApplication = QApplication([spec.title])
     window: OwnOriginWindow = OwnOriginWindow(spec, QSettings(ORGANISATION, spec.title))
     # The app never writes to stdin, so it turns readable only at its end: the app closed the

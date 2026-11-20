@@ -30,7 +30,6 @@ class WebWindow(TrayTarget):
             title=title,
             url=url,
             icon=icon,
-            log_level=logging.getLevelName(logging.getLogger().getEffectiveLevel()),
         )
         # None: no window open
         self._process: QProcess | None = None
