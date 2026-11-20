@@ -1,4 +1,5 @@
-# GITHUB_TOKEN push starts no workflows, so it starts `workflows` itself; each needs workflow_dispatch.
+# A push with GITHUB_TOKEN starts no workflows, so this starts `workflows` itself; each needs a
+# workflow_dispatch trigger.
 name: Visual baselines
 
 on:
@@ -17,7 +18,7 @@ env:
   SNAPSHOTS_DIR: visual/__snapshots__
 
 jobs:
-  # read-only token: runs the project's npm dependencies
+  # The project's npm dependencies run here, with a read-only token.
   screenshots:
     runs-on: ubuntu-latest
     permissions:
@@ -33,7 +34,7 @@ jobs:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # branch's newest commit, not the queued one
+          # The branch's newest commit, not the one it had when the run was queued.
           ref: ${{ github.ref_name }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -49,9 +50,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run build-storybook
-      - name: Start from the default branch's baselines
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      - name: Start from main's baselines
         run: uv run --locked --project .release-tools/release-tools visual-baselines-restore
       - run: npm run test:visual:update
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -61,7 +60,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # can push and start workflows: runs none of the project's code
+  # This job can push and start workflows, so it runs none of the project's code.
   commit:
     needs: screenshots
     runs-on: ubuntu-latest

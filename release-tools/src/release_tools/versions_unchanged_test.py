@@ -7,11 +7,6 @@ from release_tools.versions_unchanged import main
 # Versions are relative to whatever the clone holds: 0.0.1 is lower, 99.x higher.
 
 
-@pytest.fixture(autouse=True)
-def default_branch(monkeypatch):
-    monkeypatch.setenv("DEFAULT_BRANCH", "main")
-
-
 def commit_on(clone, change):
     change()
     clone.repo.git.add("-A")
@@ -100,4 +95,13 @@ def test_a_release_on_main_after_the_branch_left_passes_at_its_head(clone):
     clone.repo.git.switch("main")
     clone.push_to_main(lambda: clone.set_markcom_version("99.0.0"))
     clone.repo.git.switch("pr")
+    assert main() == 0
+
+
+def test_a_release_on_main_after_the_merge_commit_was_made_passes(clone):
+    clone.merge_pr(lambda: None)
+    merged = clone.repo.head.commit
+    clone.repo.git.switch("-c", "later-main", "HEAD^1")
+    clone.push_to_main(lambda: clone.set_markcom_version("99.0.0"))
+    clone.repo.git.checkout(merged.hexsha)
     assert main() == 0

@@ -7,11 +7,11 @@ ENCODING = "utf-8"
 REMOTE = "origin"
 MAIN = "main"
 REMOTE_MAIN = f"{REMOTE}/{MAIN}"
-# the commit a run is for: the pushed commit, or a pull request's merge commit
+# the commit a run is for: the pushed commit, a pull request's merge commit or a branch head
 HEAD = "HEAD"
 PUSH_HEAD_TO_MAIN = f"{HEAD}:{MAIN}"
 FETCHED = "FETCH_HEAD"
-# git -z ends each path with NUL, so any file name comes through as it is
+# git -z ends each path with NUL, so any file name comes through as it is.
 PATH_END = "\0"
 
 VERSION_KEY = "version"
@@ -30,7 +30,6 @@ NO_CHANGES = "No changes"
 
 # GITHUB_* set by GitHub Actions; the rest by our workflows
 LABELS_VARIABLE = "RELEASE_LABELS"
-DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
 SNAPSHOTS_VARIABLE = "SNAPSHOTS_DIR"
 BRANCH_VARIABLE = "GITHUB_REF_NAME"
 OUTPUT_VARIABLE = "GITHUB_OUTPUT"

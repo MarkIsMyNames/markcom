@@ -1,6 +1,5 @@
-"""markcom's visual-baselines workflow's git steps, in a checkout of a pull request branch's commit.
-visual-baselines-restore puts the default branch's baselines back, so Playwright compares each
-story with them; visual-baselines-commit commits and pushes the images that changed."""
+"""The git steps of markcom's visual-baselines workflow. Restore puts main's baselines back, so
+Playwright compares each story with main's, not with an earlier run's."""
 
 import os
 from collections.abc import Callable
@@ -12,10 +11,10 @@ from markcom import NoSecrets, run
 from release_tools.config import CONFIG_PATH, ToolConfig
 from release_tools.constants import (
     BRANCH_VARIABLE,
-    DEFAULT_BRANCH_VARIABLE,
     ENCODING,
     FETCHED,
     HEAD,
+    MAIN,
     NO_CHANGES,
     OUTPUT_VARIABLE,
     PATH_END,
@@ -32,20 +31,27 @@ def _paths(listing: str) -> list[str]:
     return [path for path in listing.split(PATH_END) if path]
 
 
-def _files(repo: Repo, revision: str, folder: str) -> set[str]:
-    return set(_paths(repo.git.ls_tree("-r", "-z", "--name-only", revision, "--", folder)))
-
-
 def _restore(_config: ToolConfig, _secrets: NoSecrets) -> None:
     snapshots = os.environ[SNAPSHOTS_VARIABLE]
-    branch = os.environ[DEFAULT_BRANCH_VARIABLE]
     with Repo(search_parent_directories=True) as repo:
-        repo.git.fetch("--depth=1", REMOTE, branch)
-        # baseline branch deleted or renamed stays gone
-        restored = sorted(_files(repo, FETCHED, snapshots) & _files(repo, HEAD, snapshots))
-        if restored:
-            repo.git.checkout(FETCHED, "--", *restored)
-    say(f"{len(restored)} baselines from {branch}")
+        repo.git.fetch("--depth=1", REMOTE, MAIN)
+        # Only baselines both have: one the branch deleted or renamed stays gone.
+        differing = _paths(
+            repo.git.diff_tree(
+                "-r",
+                "-z",
+                "--name-only",
+                "--no-renames",
+                "--diff-filter=M",
+                HEAD,
+                FETCHED,
+                "--",
+                snapshots,
+            )
+        )
+        if differing:
+            repo.git.checkout(FETCHED, "--", *differing)
+    say(f"{len(differing)} baselines back from {MAIN}")
 
 
 def _commit(config: ToolConfig, _secrets: NoSecrets) -> None:
@@ -63,11 +69,10 @@ def _commit(config: ToolConfig, _secrets: NoSecrets) -> None:
             GIT_COMMITTER_EMAIL=config.bot.email,
         ):
             repo.git.commit("-m", config.baselines_commit_message)
-        # onto screenshots' commit: rejected if branch moved since
+        # The push fails if the branch has moved since the screenshots' commit.
         repo.git.push(REMOTE, f"{HEAD}:refs/heads/{os.environ[BRANCH_VARIABLE]}")
         pushed = repo.head.commit.hexsha
     _summarise([f"Commit: {pushed}", "", "Changed images:", *(f"- {path}" for path in changed)])
-    # GITHUB_TOKEN push starts no workflows; next step starts checks on this commit
     with Path(os.environ[OUTPUT_VARIABLE]).open("a", encoding=ENCODING) as output:
         output.write(f"commit={pushed}\n")
 
