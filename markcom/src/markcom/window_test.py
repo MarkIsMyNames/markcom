@@ -9,7 +9,7 @@ from typing import override
 
 import pytest
 from pydantic import HttpUrl
-from PySide6.QtCore import QDeadlineTimer, QEventLoop, QTimer
+from PySide6.QtCore import QDeadlineTimer, QEventLoop, QMetaObject, Qt, QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
@@ -197,20 +197,38 @@ def test_the_page_address_is_not_on_the_window_processs_command_line(page, icon)
         assert wait_until(lambda: window_processes() == [])
 
 
-def run_an_app_that_quits_with_its_window_open(url, icon):
+class QuitOnRequest(SimpleHTTPRequestHandler):
+    """Quits the app once the window process asks for the page, so it has started."""
+
+    @override
+    def log_message(self, *args):
+        pass
+
+    @override
+    def do_GET(self):
+        super().do_GET()
+        QMetaObject.invokeMethod(
+            QApplication.instance(), "quit", Qt.ConnectionType.QueuedConnection
+        )
+
+
+def run_an_app_that_quits_with_its_window_open(folder, icon):
     """Child process: exits 0 only if its window process ended before the app did."""
     app = QApplication(["Quitting"])
     app.setQuitOnLastWindowClosed(False)
-    window = WebWindow("Quitting", HttpUrl(url), icon)
-    window.open()
-    QTimer.singleShot(0, app.quit)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuitOnRequest, directory=str(folder)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
+    WebWindow("Quitting", HttpUrl(url), icon).open()
     app.exec()
+    server.shutdown()
     raise SystemExit(len(window_processes()))
 
 
-def test_quitting_the_app_ends_an_open_windows_process_first(page, icon):
+def test_quitting_the_app_ends_an_open_windows_process_first(tmp_path, icon):
+    (tmp_path / "index.html").write_text("<title>Home</title>", encoding="utf-8")
     child = multiprocessing.get_context("spawn").Process(
-        target=run_an_app_that_quits_with_its_window_open, args=(page[0], icon)
+        target=run_an_app_that_quits_with_its_window_open, args=(tmp_path, icon)
     )
     child.start()
     try:
@@ -220,6 +238,21 @@ def test_quitting_the_app_ends_an_open_windows_process_first(page, icon):
         if child.is_alive():
             child.kill()
             child.join()
+
+
+def build_a_window_with_no_app(icon):
+    """Child process: no QApplication, so none of the other tests' is present."""
+    with pytest.raises(RuntimeError):
+        WebWindow("Early", HttpUrl("http://127.0.0.1:9/"), icon)
+
+
+def test_a_window_built_before_the_app_fails(icon):
+    child = multiprocessing.get_context("spawn").Process(
+        target=build_a_window_with_no_app, args=(icon,)
+    )
+    child.start()
+    child.join(60)
+    assert child.exitcode == 0
 
 
 def run_a_window_without_a_tray(url, icon):

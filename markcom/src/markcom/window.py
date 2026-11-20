@@ -1,5 +1,5 @@
-"""Web frontend in its own window, run by its own process (markcom.window_process), started on each
-open and ended on each close, so a closed window holds no QtWebEngine memory."""
+"""A web window in its own process (markcom.window_process), so a closed window holds no
+QtWebEngine memory."""
 
 import logging
 import sys
@@ -17,14 +17,13 @@ from markcom.window_messages import SPEC_VARIABLE, WindowSpec
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# -P: app's working folder can't shadow a module; -c, not -m, so the module logs under its name
+# -P stops the app's working folder shadowing a module; -c, unlike -m, keeps the module's log name.
 WINDOW_PROCESS: tuple[str, ...] = ("-P", "-c", "from markcom.window_process import main; main()")
 MS_PER_SEC: int = 1000
 
 
 class WebWindow(TrayTarget):
-    """Web page in its own window. Build it after the QApplication; GUI thread only, as Qt
-    requires. Each open loads the page afresh, at the last window's size."""
+    """GUI thread only, as Qt requires."""
 
     def __init__(self, title: str, url: HttpUrl, icon: Path) -> None:
         self._spec: WindowSpec = WindowSpec(
@@ -35,13 +34,13 @@ class WebWindow(TrayTarget):
         )
         # None: no window open
         self._process: QProcess | None = None
-        # deleting a QProcess kills its process, so closed ones are kept until they end
+        # Deleting a QProcess kills its process, so closed ones are kept until they end.
         self._ending: set[QProcess] = set()
         app: QCoreApplication | None = QApplication.instance()
         if app is None:
             no_app: str = "build the WebWindow after the QApplication"
             raise RuntimeError(no_app)
-        # else Qt kills a running window process at exit
+        # Otherwise Qt kills a running window process at exit.
         app.aboutToQuit.connect(self._end_on_quit)
 
     @override
@@ -53,9 +52,9 @@ class WebWindow(TrayTarget):
         if self._process is not None:
             logger.debug("The window is already open")
             return
-        # set before start(): a failure to start is signalled within it
+        # Set before start(), which signals a failure to start from within.
         self._process = self._new_process()
-        # scheme, host and port only: URL may carry a token
+        # Scheme, host and port only: the URL may carry a token.
         logger.info(
             "Starting the window for %s://%s:%s",
             self._spec.url.scheme,
@@ -71,7 +70,7 @@ class WebWindow(TrayTarget):
             return
         logger.debug("Closing the window")
         self._ending.add(self._process)
-        # end of input closes the window, and its process ends
+        # The end of its input closes the window, and its process ends.
         self._process.closeWriteChannel()
         self._process = None
 
@@ -95,24 +94,21 @@ class WebWindow(TrayTarget):
         self._ended(process)
 
     def _on_error(self, process: QProcess, error: QProcess.ProcessError) -> None:
+        # Other errors also end in finished, which logs them.
         if error is QProcess.ProcessError.FailedToStart:
-            # no process, so no finished signal follows
             logger.error("The window process failed to start: %s", process.errorString())
             self._ended(process)
-            return
-        logger.warning("The window process reported %s: %s", error.name, process.errorString())
 
     def _ended(self, process: QProcess) -> None:
         self._ending.discard(process)
-        # closed from its title bar, or failed
+        # Closed from its title bar, or failed.
         if process is self._process:
             self._process = None
         process.deleteLater()
-        # as Qt does for its own windows: no tray, last window closed, app quits
+        # As for Qt's own windows: without a tray, closing the last window quits the app.
         if (
             QApplication.quitOnLastWindowClosed()
             and self._process is None
-            and not self._ending
             and not any(window.isVisible() for window in QApplication.topLevelWindows())
         ):
             logger.info("The last window closed, so the app quits")

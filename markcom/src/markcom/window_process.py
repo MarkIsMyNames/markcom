@@ -1,7 +1,5 @@
-"""The web window's own process: WebWindow starts it on each open, with a WindowSpec in its
-environment, and it ends when its stdin closes, so a closed window holds no QtWebEngine memory.
-A fresh window each open also avoids Wayland's re-shown window starting at the wrong scale, which
-QtWebEngine showed as a stretched frame."""
+"""The web window's own process, which ends when its stdin does. A fresh window each open also
+avoids Wayland showing a re-shown window at the wrong scale, which QtWebEngine stretched."""
 
 import logging
 import os
@@ -27,10 +25,8 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 # Links that leave the window for the default browser; any other scheme is refused.
 BROWSER_SCHEMES: frozenset[WebProtocol] = frozenset({WebProtocol.HTTP, WebProtocol.HTTPS})
-# The window's size and maximised state, kept in ~/.config/<ORGANISATION>/<title>.conf.
 ORGANISATION: str = "markcom"
 GEOMETRY_KEY: str = "geometry"
-READ_SIZE: int = 4096
 
 
 class _OwnOriginPage(QWebEnginePage):
@@ -76,8 +72,7 @@ class _OwnOriginPage(QWebEnginePage):
 
 
 class OwnOriginWindow(QMainWindow):
-    """The page in a window, loading as it is built, at the size `settings` kept from the last
-    one."""
+    """The page in a window, at the size the last one saved in `settings`."""
 
     def __init__(self, spec: WindowSpec, settings: QSettings) -> None:
         super().__init__()
@@ -85,18 +80,16 @@ class OwnOriginWindow(QMainWindow):
         start: QUrl = QUrl(str(spec.url))
         view: QWebEngineView = QWebEngineView(self)
         page: _OwnOriginPage = _OwnOriginPage(start, view)
-        # theme colour until page draws: dark page won't flash white
+        # Until the page draws, the theme's colour shows rather than white.
         page.setBackgroundColor(self.palette().color(QPalette.ColorRole.Base))
         view.setPage(page)
         self.setCentralWidget(view)
         self.setWindowTitle(spec.title)
         self.setWindowIcon(QIcon(str(spec.icon)))
+        self.resize(CONFIG.window.width, CONFIG.window.height)
         geometry: object = settings.value(GEOMETRY_KEY)
         if isinstance(geometry, QByteArray):
             self.restoreGeometry(geometry)
-        else:
-            logger.debug("No saved size, so the configured one")
-            self.resize(CONFIG.window.width, CONFIG.window.height)
         logger.info("Loading %s://%s:%d", start.scheme(), start.host(), start.port())
         view.load(start)
 
@@ -108,19 +101,16 @@ class OwnOriginWindow(QMainWindow):
 
 
 class CloseOnEndOfInput(QObject):
-    """Closes the window when `fd` (stdin) reaches its end: the app closed it, or the app ended.
-    A child of the window, so it lives as long as the window does."""
+    """Closes the window when `fd` (stdin) ends: the app closed it or ended. The app never writes
+    to it, so any read event is the end. A child of the window, so it lives as long."""
 
     def __init__(self, fd: int, window: QMainWindow) -> None:
         super().__init__(window)
-        self._fd: int = fd
         self._window: QMainWindow = window
         self._notifier: QSocketNotifier = QSocketNotifier(fd, QSocketNotifier.Type.Read, self)
-        self._notifier.activated.connect(self._read)
+        self._notifier.activated.connect(self._close)
 
-    def _read(self) -> None:
-        if os.read(self._fd, READ_SIZE):
-            return
+    def _close(self) -> None:
         logger.info("The app closed the window")
         self._notifier.setEnabled(False)
         self._window.close()

@@ -1,4 +1,4 @@
-"""The window process's spec. No Qt imports: the app's process never loads QtWebEngine."""
+"""The window process's spec, apart from window.py so the window process needn't import the tray."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ from pydantic import HttpUrl
 
 from markcom.config import LogLevel, StrictModel
 
-# env, not argv: any local user can read argv, and the URL may carry a token
+# The environment, not argv: any local user can read argv, and the URL may carry a token.
 SPEC_VARIABLE: str = "MARKCOM_WINDOW_SPEC"
 
 
@@ -14,5 +14,5 @@ class WindowSpec(StrictModel):
     title: str
     url: HttpUrl
     icon: Path
-    # the app's, so the window logs as much
+    # The app's, so the window logs as much as it does.
     log_level: LogLevel

@@ -280,13 +280,3 @@ def test_the_end_of_input_closes_the_window(make_window, pipe):
     window.show()
     writer.close()
     assert wait_until(lambda: not window.isVisible())
-
-
-def test_input_before_its_end_leaves_the_window_open(make_window, pipe):
-    reader, writer = pipe
-    window = make_window()
-    CloseOnEndOfInput(reader.fileno(), window)
-    window.show()
-    writer.write(b"anything\n")
-    wait_until(lambda: False, QUIET_MS)
-    assert window.isVisible()
