@@ -24,8 +24,6 @@ from release_tools.constants import (
 )
 from release_tools.report import error, say
 
-type Step = Callable[[ToolConfig, NoSecrets], None]
-
 
 def _paths(listing: str) -> list[str]:
     return [path for path in listing.split(PATH_END) if path]
@@ -84,7 +82,7 @@ def _summarise(lines: list[str]) -> None:
         summary.write(text)
 
 
-def _main(step: Step) -> int:
+def _main(step: Callable[[ToolConfig, NoSecrets], None]) -> int:
     try:
         run(step, CONFIG_PATH, ToolConfig, NoSecrets)
     except GitCommandError as failure:
