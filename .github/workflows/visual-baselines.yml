@@ -1,23 +1,4 @@
-# Commits a pull request branch's changed visual baselines (Playwright screenshots of Storybook stories), compared
-# with the default branch's. The run summary lists the commit and images, or "No changes". The project needs
-# build-storybook and test:visual:update scripts. Started by hand (gh workflow run visual-baselines.yml --ref
-# <branch>) from:
-#
-#   on: workflow_dispatch
-#   permissions:
-#     contents: write
-#     actions: write
-#   jobs:
-#     update:
-#       concurrency:
-#         group: visual-baselines-${{ github.ref }}
-#         cancel-in-progress: false
-#       uses: MarkIsMyNames/markcom/.github/workflows/visual-baselines.yml@<commit sha> # release-tools-v<version>
-#       with:
-#         node-version: "26"
-#         workflows: ci.yml ui-tests.yml
-#
-# A GITHUB_TOKEN push starts no workflows, so it starts `workflows` (each with a workflow_dispatch trigger) itself.
+# GITHUB_TOKEN push starts no workflows, so it starts `workflows` itself; each needs workflow_dispatch.
 name: Visual baselines
 
 on:
