@@ -54,6 +54,8 @@ def project(tmp_path, monkeypatch):
     monkeypatch.setenv("SNAPSHOTS_DIR", SNAPSHOTS)
     monkeypatch.setenv("DEFAULT_BRANCH", "main")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
+    (tmp_path / "output").touch()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "output"))
     yield made
     made.repo.close()
     made.origin.close()
@@ -61,6 +63,10 @@ def project(tmp_path, monkeypatch):
 
 def summary(tmp_path) -> str:
     return (tmp_path / "summary.md").read_text(encoding="utf-8")
+
+
+def output(tmp_path) -> str:
+    return (tmp_path / "output").read_text(encoding="utf-8")
 
 
 def an_earlier_run_changed_a(project):
@@ -111,6 +117,18 @@ def test_commit_pushes_only_the_changed_images_and_reports_them(project, tmp_pat
     assert f"{SNAPSHOTS}/a.png" in report
     assert f"{SNAPSHOTS}/c.png" in report
     assert f"{SNAPSHOTS}/b.png" not in report
+
+
+def test_the_commit_goes_to_later_steps_so_they_can_start_the_checks(project, tmp_path):
+    project.write_image("a.png", b"a changed")
+    commit()
+    assert output(tmp_path) == f"commit={project.origin_feature().hexsha}\n"
+
+
+@pytest.mark.usefixtures("project")
+def test_no_commit_goes_to_later_steps_when_no_image_changed(tmp_path):
+    commit()
+    assert output(tmp_path) == ""
 
 
 def test_a_second_change_is_compared_with_the_default_branch_not_the_earlier_run(project):

@@ -7,40 +7,34 @@
 #
 #   on: workflow_dispatch
 #   permissions:
-#     contents: read
+#     contents: write
+#     actions: write
 #   jobs:
 #     update:
 #       uses: MarkIsMyNames/markcom/.github/workflows/visual-baselines.yml@<commit sha> # main
 #       with:
-#         app-client-id: ${{ vars.CI_PUSH_APP_CLIENT_ID }}
 #         node-version: "26"
-#       secrets:
-#         app-private-key: ${{ secrets.CI_PUSH_APP_PRIVATE_KEY }}
+#         workflows: ci.yml ui-tests.yml
 #
-# A push made with GITHUB_TOKEN starts no workflows, so the project's checks would never run on the baseline
-# commit. The push uses a GitHub App's token instead: an app with Contents read and write, installed on the
-# repository, whose client ID and a private key the caller passes in.
+# A push made with GITHUB_TOKEN starts no workflows, so after pushing it starts each of `workflows` on the baseline
+# commit itself, as their checks would otherwise stay pending. Each needs a workflow_dispatch trigger.
 name: Visual baselines
 
 on:
   workflow_call:
     inputs:
-      app-client-id:
-        description: The client ID of the GitHub App that pushes the baselines.
-        type: string
-        required: true
       node-version:
         description: The Node.js version the project's UI tests run on.
+        type: string
+        required: true
+      workflows:
+        description: The workflow files to start on the baseline commit, space-separated.
         type: string
         required: true
       snapshots:
         description: The folder Playwright keeps the baselines in.
         type: string
         default: visual/__snapshots__
-    secrets:
-      app-private-key:
-        description: A private key of that GitHub App.
-        required: true
 
 jobs:
   update:
@@ -50,24 +44,18 @@ jobs:
       group: visual-baselines-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
+      actions: write
     steps:
       - name: Refuse the default branch
         if: github.ref_type != 'branch' || github.ref_name == 'main' || github.ref_name == github.event.repository.default_branch
         run: |
           echo "::error::Run this on a pull request branch, not ${GITHUB_REF_NAME}"
           exit 1
-      - id: app-token
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
-        with:
-          client-id: ${{ inputs.app-client-id }}
-          private-key: ${{ secrets.app-private-key }}
-          permission-contents: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The branch's newest commit, not the one it had when this run was queued.
           ref: ${{ github.ref_name }}
-          token: ${{ steps.app-token.outputs.token }}
       # release-tools from the markcom commit this workflow came from; left untracked, so the
       # baseline commit never includes it
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -92,6 +80,18 @@ jobs:
       - name: Update the screenshots that differ
         run: npm run test:visual:update
       - name: Commit the changed baselines
+        id: commit
         env:
           SNAPSHOTS_DIR: ${{ inputs.snapshots }}
         run: uv run --locked --project .release-tools/release-tools visual-baselines-commit
+      - name: Start the checks on the baseline commit
+        if: steps.commit.outputs.commit != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          WORKFLOWS: ${{ inputs.workflows }}
+        run: |
+          for workflow in $WORKFLOWS; do
+            gh workflow run "$workflow" --ref "$GITHUB_REF_NAME"
+            echo "Started $workflow" | tee -a "$GITHUB_STEP_SUMMARY"
+          done

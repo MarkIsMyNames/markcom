@@ -8,7 +8,8 @@ the screenshots that differ. A story new on the branch keeps its own baseline, a
 branch has none.
 
 visual-baselines-commit then commits the images that changed, pushes them to the branch, and
-writes the commit and those images to the run's summary, or "No changes"."""
+writes the commit and those images to the run's summary, or "No changes". It hands the commit to
+later steps as the step output `commit`, empty when nothing changed."""
 
 import os
 from collections.abc import Callable
@@ -24,8 +25,9 @@ from release_tools.report import error, say
 
 SNAPSHOTS_VARIABLE = "SNAPSHOTS_DIR"
 DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
-# set in GitHub Actions: the file a step adds its Markdown summary to
+# set in GitHub Actions: the files a step adds its Markdown summary and its outputs to
 SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
+OUTPUT_VARIABLE = "GITHUB_OUTPUT"
 FETCHED = "FETCH_HEAD"
 NO_CHANGES = "No changes"
 # git diff --name-status's mark for a file the commit adds
@@ -70,6 +72,9 @@ def _commit(config: ToolConfig, _secrets: NoSecrets) -> None:
     _summarise(
         [f"Commit: {pushed}", "", "Changed images:", *(_describe(change) for change in changes)]
     )
+    # a push with GITHUB_TOKEN starts no workflows, so the next step starts the checks on it
+    with Path(os.environ[OUTPUT_VARIABLE]).open("a", encoding=ENCODING) as output:
+        output.write(f"commit={pushed}\n")
 
 
 def _describe(change: str) -> str:
