@@ -65,6 +65,8 @@ CONFIG_PATH: Path = Path(__file__).with_name("config.json")
 type HexColour = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 type Pixels = Annotated[int, Field(gt=0)]
 type PixelGap = Annotated[int, Field(ge=0)]
+type Seconds = Annotated[float, Field(gt=0)]
+type Count = Annotated[int, Field(ge=0)]
 
 
 class TrayConfig(StrictModel):
@@ -83,14 +85,12 @@ class TrayConfig(StrictModel):
 
 
 class WindowConfig(StrictModel):
-    """Web window's opening size; after that Qt keeps the user's."""
+    """Web window's first size; each later window takes the last one's size and maximised state."""
 
     width: Pixels
     height: Pixels
-
-
-type Seconds = Annotated[float, Field(gt=0)]
-type Count = Annotated[int, Field(ge=0)]
+    # Seconds an open window's process gets to close as the app quits, before Qt kills it.
+    close_wait_sec: Seconds
 
 
 class UiServerConfig(StrictModel):

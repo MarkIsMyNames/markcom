@@ -11,7 +11,8 @@
   },
   "window": {
     "width": 1280,
-    "height": 800
+    "height": 800,
+    "close_wait_sec": 5.0
   },
   "ui_server": {
     "shutdown_grace_sec": 1,
