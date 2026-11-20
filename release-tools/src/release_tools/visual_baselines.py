@@ -11,21 +11,19 @@ from markcom import NoSecrets, run
 
 from release_tools.config import CONFIG_PATH, ToolConfig
 from release_tools.constants import (
+    BRANCH_VARIABLE,
     DEFAULT_BRANCH_VARIABLE,
     ENCODING,
+    FETCHED,
     HEAD,
+    NO_CHANGES,
     OUTPUT_VARIABLE,
+    PATH_END,
     REMOTE,
+    SNAPSHOTS_VARIABLE,
+    SUMMARY_VARIABLE,
 )
 from release_tools.report import error, say
-
-SNAPSHOTS_VARIABLE = "SNAPSHOTS_DIR"
-BRANCH_VARIABLE = "GITHUB_REF_NAME"
-SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
-FETCHED = "FETCH_HEAD"
-NO_CHANGES = "No changes"
-# git -z ends each path with NUL, so any file name comes through as it is
-PATH_END = "\0"
 
 type Step = Callable[[ToolConfig, NoSecrets], None]
 

@@ -15,6 +15,7 @@ from release_tools.config import CONFIG_PATH, ToolConfig
 from release_tools.constants import (
     ENCODING,
     HEAD,
+    LABELS_VARIABLE,
     MAIN,
     OUTPUT_VARIABLE,
     PUSH_HEAD_TO_MAIN,
@@ -24,8 +25,6 @@ from release_tools.constants import (
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
 from release_tools.versions import BumpLevel, Version, bump_level
-
-LABELS_VARIABLE = "RELEASE_LABELS"
 
 
 class ReleaseError(RuntimeError):
