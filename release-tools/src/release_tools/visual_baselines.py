@@ -1,19 +1,10 @@
-"""The git steps of markcom's visual-baselines workflow, run in a project's checkout of a pull
-request branch's commit, with the snapshot folder in SNAPSHOTS_DIR.
-
-visual-baselines-restore puts the default branch's (DEFAULT_BRANCH) baselines back in the snapshot
-folder, so Playwright's update compares each story with them, not with an earlier run's, and
-rewrites only the screenshots that differ. A baseline new on the branch keeps its own version, as
-the default branch has none, and one the branch deleted stays deleted.
-
-visual-baselines-commit then commits the images that changed, pushes them to the branch
-(GITHUB_REF_NAME), and writes the commit and those images to the run's summary, or "No changes".
-It hands the commit to later steps as the step output `commit`, empty when nothing changed."""
+"""markcom's visual-baselines workflow's git steps, in a checkout of a pull request branch's commit.
+visual-baselines-restore puts the default branch's baselines back, so Playwright compares each
+story with them; visual-baselines-commit commits and pushes the images that changed."""
 
 import os
 from collections.abc import Callable
-from itertools import batched
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from git import GitCommandError, Repo
 from markcom import NoSecrets, run
@@ -25,60 +16,46 @@ from release_tools.constants import (
     HEAD,
     OUTPUT_VARIABLE,
     REMOTE,
-    SUMMARY_VARIABLE,
 )
 from release_tools.report import error, say
 
 SNAPSHOTS_VARIABLE = "SNAPSHOTS_DIR"
-# set in GitHub Actions: the branch the run was started on
 BRANCH_VARIABLE = "GITHUB_REF_NAME"
+SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
 FETCHED = "FETCH_HEAD"
 NO_CHANGES = "No changes"
-# git's -z output separates its fields with NUL
-FIELD_END = "\0"
-# git diff --name-status's mark for a file the commit adds
-ADDED = "A"
+# git -z ends each path with NUL, so any file name comes through as it is
+PATH_END = "\0"
 
 type Step = Callable[[ToolConfig, NoSecrets], None]
 
 
-def _snapshots() -> str:
-    # as git names it: no ./ in front, no / after
-    return PurePosixPath(os.environ[SNAPSHOTS_VARIABLE]).as_posix()
+def _paths(listing: str) -> list[str]:
+    return [path for path in listing.split(PATH_END) if path]
 
 
 def _files(repo: Repo, revision: str, folder: str) -> set[str]:
-    listing: str = repo.git.ls_tree("-r", "-z", "--name-only", revision, "--", folder)
-    return {path for path in listing.split(FIELD_END) if path}
+    return set(_paths(repo.git.ls_tree("-r", "-z", "--name-only", revision, "--", folder)))
 
 
 def _restore(_config: ToolConfig, _secrets: NoSecrets) -> None:
-    snapshots = _snapshots()
+    snapshots = os.environ[SNAPSHOTS_VARIABLE]
     branch = os.environ[DEFAULT_BRANCH_VARIABLE]
     with Repo(search_parent_directories=True) as repo:
         repo.git.fetch("--depth=1", REMOTE, branch)
-        on_default = _files(repo, FETCHED, snapshots)
-        if not on_default:
-            say(f"{branch} has no baselines yet, so screenshots are compared with the branch's own")
-            return
-        # only baselines the branch still has: one it deleted or renamed stays gone
-        restored = sorted(on_default & _files(repo, HEAD, snapshots))
+        # baseline branch deleted or renamed stays gone
+        restored = sorted(_files(repo, FETCHED, snapshots) & _files(repo, HEAD, snapshots))
         if restored:
             repo.git.checkout(FETCHED, "--", *restored)
     say(f"{len(restored)} baselines from {branch}")
 
 
 def _commit(config: ToolConfig, _secrets: NoSecrets) -> None:
-    snapshots = _snapshots()
-    branch = os.environ[BRANCH_VARIABLE]
+    snapshots = os.environ[SNAPSHOTS_VARIABLE]
     with Repo(search_parent_directories=True) as repo:
         repo.git.add("--all", "--", snapshots)
-        listing: str = repo.git.diff(
-            "--staged", "--name-status", "-z", "--no-renames", "--", snapshots
-        )
-        fields = [field for field in listing.split(FIELD_END) if field]
-        changes = list(batched(fields, 2, strict=True))
-        if not changes:
+        changed = _paths(repo.git.diff("--staged", "--name-only", "-z", "--", snapshots))
+        if not changed:
             _summarise([NO_CHANGES])
             return
         with repo.git.custom_environment(
@@ -87,20 +64,12 @@ def _commit(config: ToolConfig, _secrets: NoSecrets) -> None:
             GIT_COMMITTER_NAME=config.bot.name,
             GIT_COMMITTER_EMAIL=config.bot.email,
         ):
-            # the snapshot folder only, whatever else the run left changed
-            repo.git.commit("-m", config.baselines_commit_message, "--", snapshots)
-        # onto the commit the screenshots were made from: rejected if the branch has moved since
-        repo.git.push(REMOTE, f"{HEAD}:refs/heads/{branch}")
+            repo.git.commit("-m", config.baselines_commit_message)
+        # onto screenshots' commit: rejected if branch moved since
+        repo.git.push(REMOTE, f"{HEAD}:refs/heads/{os.environ[BRANCH_VARIABLE]}")
         pushed = repo.head.commit.hexsha
-    _summarise(
-        [
-            f"Commit: {pushed}",
-            "",
-            "Changed images:",
-            *(f"- {path} ({'added' if mark == ADDED else 'changed'})" for mark, path in changes),
-        ]
-    )
-    # a push with GITHUB_TOKEN starts no workflows, so the next step starts the checks on it
+    _summarise([f"Commit: {pushed}", "", "Changed images:", *(f"- {path}" for path in changed)])
+    # GITHUB_TOKEN push starts no workflows; next step starts checks on this commit
     with Path(os.environ[OUTPUT_VARIABLE]).open("a", encoding=ENCODING) as output:
         output.write(f"commit={pushed}\n")
 

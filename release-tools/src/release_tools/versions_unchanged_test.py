@@ -8,14 +8,7 @@ from release_tools.versions_unchanged import main
 
 
 @pytest.fixture(autouse=True)
-def pull_request_event(monkeypatch):
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-
-
-@pytest.fixture
-def started_by_hand(monkeypatch):
-    """A run started with workflow_dispatch on a branch, as visual-baselines starts CI."""
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+def default_branch(monkeypatch):
     monkeypatch.setenv("DEFAULT_BRANCH", "main")
 
 
@@ -93,8 +86,7 @@ def test_library_new_in_the_pull_request_passes(clone, capsys):
     assert "newlib: 0.1.0, new" in capsys.readouterr().out
 
 
-@pytest.mark.usefixtures("started_by_hand")
-def test_a_version_changed_earlier_on_the_branch_fails_a_run_started_by_hand(clone, capsys):
+def test_a_version_changed_earlier_on_a_branch_fails_at_its_head(clone, capsys):
     clone.repo.git.switch("-c", "pr")
     commit_on(clone, lambda: clone.set_markcom_version("99.0.0"))
     commit_on(clone, lambda: clone.append("README.md", "\nlater commit\n"))
@@ -102,8 +94,7 @@ def test_a_version_changed_earlier_on_the_branch_fails_a_run_started_by_hand(clo
     assert "markcom: version changed from " in capsys.readouterr().out
 
 
-@pytest.mark.usefixtures("started_by_hand")
-def test_a_release_on_main_after_the_branch_left_passes_a_run_started_by_hand(clone):
+def test_a_release_on_main_after_the_branch_left_passes_at_its_head(clone):
     clone.repo.git.switch("-c", "pr")
     commit_on(clone, lambda: clone.append("README.md", "\nbranch commit\n"))
     clone.repo.git.switch("main")

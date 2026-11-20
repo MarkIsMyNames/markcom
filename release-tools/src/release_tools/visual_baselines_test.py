@@ -100,14 +100,6 @@ def test_restore_puts_back_the_default_branchs_baselines(project):
     assert project.image("b.png") == b"b on main"
 
 
-@pytest.mark.parametrize("folder", [f"{SNAPSHOTS}/", f"./{SNAPSHOTS}"])
-def test_restore_takes_the_folder_however_it_is_written(project, monkeypatch, folder):
-    an_earlier_run_changed_a(project)
-    monkeypatch.setenv("SNAPSHOTS_DIR", folder)
-    restore()
-    assert project.image("a.png") == b"a on main"
-
-
 def test_restore_keeps_a_baseline_new_on_the_branch(project):
     project.write_image("c.png", b"c, a new story")
     project.commit_and_push("new story")

@@ -1,9 +1,6 @@
-"""Pull request check: fails when a pull request changes a library's version. CI writes every
-version when it releases, sized by the pull request's labels. On a pull_request event it runs at
-GitHub's pull request merge commit, whose first parent is main. Started by hand on a branch
-(workflow_dispatch, as the visual-baselines workflow starts CI), it compares the branch with the
-point where it left the default branch, DEFAULT_BRANCH, so a change made earlier on the branch
-still fails."""
+"""Fails when a branch changes a library's version since it left the default branch
+(DEFAULT_BRANCH): CI writes every version when it releases, sized by the pull request's labels.
+Run at a pull request's merge commit, or at a branch's head when started by hand."""
 
 import os
 from pathlib import Path
@@ -13,22 +10,13 @@ from markcom import NoSecrets, run
 from markcom.config import ConfigError
 
 from release_tools.config import CONFIG_PATH, Labels, ToolConfig
-from release_tools.constants import (
-    DEFAULT_BRANCH_VARIABLE,
-    EVENT_VARIABLE,
-    HEAD,
-    MAIN_BEFORE_MERGE,
-    PULL_REQUEST_EVENT,
-    REMOTE,
-)
+from release_tools.constants import DEFAULT_BRANCH_VARIABLE, HEAD, REMOTE
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
 
 
 def _base(repo: Repo) -> str:
-    """The commit the versions are compared with."""
-    if os.environ[EVENT_VARIABLE] == PULL_REQUEST_EVENT:
-        return MAIN_BEFORE_MERGE
+    # at a merge commit, its first parent; at a branch head, its fork point
     default_branch = f"{REMOTE}/{os.environ[DEFAULT_BRANCH_VARIABLE]}"
     return repo.merge_base(HEAD, default_branch)[0].hexsha
 

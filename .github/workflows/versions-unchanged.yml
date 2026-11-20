@@ -1,7 +1,6 @@
 # Fails a pull request that changes the version of a library its repository's release.json
 # lists: the release workflow writes every version. A repository calls it on pull requests, and on
-# runs started by hand on a pull request branch, as the visual-baselines workflow starts CI on its
-# baseline commit (there it compares with where the branch left the default branch):
+# runs started by hand such as visual-baselines.yml's:
 #
 #   versions-unchanged:
 #     if: github.event_name != 'push'
@@ -21,9 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # On a pull request, its merge commit and that commit's first parent, main as it is now.
-          # Started by hand, every commit, to find where the branch left the default branch.
-          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+          # every commit: compared with where it left the default branch
+          fetch-depth: 0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}

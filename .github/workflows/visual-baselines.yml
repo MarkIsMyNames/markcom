@@ -1,9 +1,7 @@
-# Updates a pull request branch's visual baselines, Playwright's screenshots of every Storybook story, and commits
-# the ones that changed, using release-tools from the same markcom commit as this workflow. Each run compares with
-# the default branch's baselines, not an earlier run's, and rewrites only the screenshots that differ from them.
-# The run summary gives the commit and the images it changed, or "No changes". The project's package.json needs
-# build-storybook and test:visual:update scripts. A project calls it from a workflow run by hand
-# (gh workflow run visual-baselines.yml --ref <branch>), pinned like the release workflow:
+# Commits a pull request branch's changed visual baselines (Playwright screenshots of Storybook stories), compared
+# with the default branch's. The run summary lists the commit and images, or "No changes". The project needs
+# build-storybook and test:visual:update scripts. Started by hand (gh workflow run visual-baselines.yml --ref
+# <branch>) from:
 #
 #   on: workflow_dispatch
 #   permissions:
@@ -11,7 +9,6 @@
 #     actions: write
 #   jobs:
 #     update:
-#       # runs on one branch take turns, so they never race to push; a third waiting run replaces the second
 #       concurrency:
 #         group: visual-baselines-${{ github.ref }}
 #         cancel-in-progress: false
@@ -20,10 +17,7 @@
 #         node-version: "26"
 #         workflows: ci.yml ui-tests.yml
 #
-# A push made with GITHUB_TOKEN starts no workflows, so after pushing it starts each of `workflows` on the baseline
-# commit itself, as their checks would otherwise stay pending. Each needs a workflow_dispatch trigger.
-# The screenshots job runs the project's dependencies with a read-only token; the commit job, which can push and
-# start workflows, runs none of them.
+# A GITHUB_TOKEN push starts no workflows, so it starts `workflows` (each with a workflow_dispatch trigger) itself.
 name: Visual baselines
 
 on:
@@ -37,12 +31,12 @@ on:
         description: The workflow files to start on the baseline commit, space-separated.
         type: string
         required: true
-      snapshots:
-        description: The folder Playwright keeps the baselines in.
-        type: string
-        default: visual/__snapshots__
+
+env:
+  SNAPSHOTS_DIR: visual/__snapshots__
 
 jobs:
+  # read-only token: runs the project's npm dependencies
   screenshots:
     runs-on: ubuntu-latest
     permissions:
@@ -58,10 +52,8 @@ jobs:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The branch's newest commit, not the one it had when this run was queued.
+          # branch's newest commit, not the queued one
           ref: ${{ github.ref_name }}
-      # release-tools from the markcom commit this workflow came from; left untracked, so the
-      # baseline commit never includes it
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -78,18 +70,17 @@ jobs:
       - run: npm run build-storybook
       - name: Start from the default branch's baselines
         env:
-          SNAPSHOTS_DIR: ${{ inputs.snapshots }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: uv run --locked --project .release-tools/release-tools visual-baselines-restore
-      - name: Update the screenshots that differ
-        run: npm run test:visual:update
+      - run: npm run test:visual:update
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: visual-baselines
-          path: ${{ inputs.snapshots }}
+          path: ${{ env.SNAPSHOTS_DIR }}
           if-no-files-found: error
           retention-days: 1
 
+  # can push and start workflows: runs none of the project's code
   commit:
     needs: screenshots
     runs-on: ubuntu-latest
@@ -99,16 +90,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The commit the screenshots were made from; the push fails if the branch has moved since.
           ref: ${{ needs.screenshots.outputs.commit }}
-      - name: Clear the snapshot folder for the screenshots job's copy
-        env:
-          SNAPSHOTS_DIR: ${{ inputs.snapshots }}
-        run: rm -rf -- "$SNAPSHOTS_DIR"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: visual-baselines
-          path: ${{ inputs.snapshots }}
+          path: ${{ env.SNAPSHOTS_DIR }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -116,10 +102,7 @@ jobs:
           path: .release-tools
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - name: Commit the changed baselines
-        id: commit
-        env:
-          SNAPSHOTS_DIR: ${{ inputs.snapshots }}
+      - id: commit
         run: uv run --locked --project .release-tools/release-tools visual-baselines-commit
       - name: Start the checks on the baseline commit
         if: steps.commit.outputs.commit != ''
