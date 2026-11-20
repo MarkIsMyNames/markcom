@@ -5,7 +5,7 @@ import asyncio
 import configparser
 import logging
 from collections.abc import Sequence
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
@@ -90,16 +90,11 @@ class SessionBus(NotificationBus):
         # dbus-fast is async only; its own loop on a worker thread works whether or not the
         # caller's thread already runs one, as uvicorn's does
         with ThreadPoolExecutor(max_workers=1) as worker:
-            sending: Future[int] = worker.submit(self._send, call)
             try:
-                notification_id: int = sending.result()
+                notification_id: int = worker.submit(asyncio.run, self._notify(call)).result()
             except DBUS_ERRORS as error:
                 raise NotificationError(str(error)) from error
         logger.debug("bus showed notification %d", notification_id)
-
-    @staticmethod
-    def _send(call: NotifyCall) -> int:
-        return asyncio.run(SessionBus._notify(call))
 
     @staticmethod
     async def _notify(call: NotifyCall) -> int:
