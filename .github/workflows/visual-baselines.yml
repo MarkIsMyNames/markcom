@@ -1,5 +1,5 @@
-# A push with GITHUB_TOKEN starts no workflows, so this starts `workflows` itself; each needs a
-# workflow_dispatch trigger.
+# Called on each pull request, and by hand to redo one. A push with GITHUB_TOKEN starts no
+# workflows, so this starts `workflows` itself; each needs a workflow_dispatch trigger.
 name: Visual baselines
 
 on:
@@ -16,10 +16,14 @@ on:
 
 env:
   SNAPSHOTS_DIR: visual/__snapshots__
+  # The pull request's branch, or the branch a run by hand was started on.
+  BRANCH: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   # The project's npm dependencies run here, with a read-only token.
   screenshots:
+    # A fork's pull request gets a read-only token, so it can't push.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,15 +31,15 @@ jobs:
       commit: ${{ steps.checkout.outputs.commit }}
     steps:
       - name: Refuse the default branch
-        if: github.ref_type != 'branch' || github.ref_name == github.event.repository.default_branch
+        if: github.ref_type == 'tag' || env.BRANCH == github.event.repository.default_branch
         run: |
-          echo "::error::Run this on a pull request branch, not ${GITHUB_REF_NAME}"
+          echo "::error::Run this on a pull request branch, not ${BRANCH}"
           exit 1
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The branch's newest commit, not the one it had when the run was queued.
-          ref: ${{ github.ref_name }}
+          ref: ${{ env.BRANCH }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -92,6 +96,6 @@ jobs:
           WORKFLOWS: ${{ inputs.workflows }}
         run: |
           for workflow in $WORKFLOWS; do
-            gh workflow run "$workflow" --ref "$GITHUB_REF_NAME"
+            gh workflow run "$workflow" --ref "$BRANCH"
             echo "Started $workflow" | tee -a "$GITHUB_STEP_SUMMARY"
           done
