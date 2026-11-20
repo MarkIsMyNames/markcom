@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 
 from markcom.config import CONFIG
 from markcom.window_messages import WindowSpec
-from markcom.window_process import CloseOnEndOfInput, OwnOriginWindow
+from markcom.window_process import OwnOriginWindow
 
 # no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
 # pages.
@@ -208,7 +208,7 @@ def test_the_next_window_takes_the_last_ones_size(make_window):
     first = make_window()
     first.show()
     first.resize(640, 480)
-    first.close()
+    first.save_size()
     second = make_window()
     second.show()
     assert second.size() == QSize(640, 480)
@@ -217,7 +217,7 @@ def test_the_next_window_takes_the_last_ones_size(make_window):
 def test_a_window_closed_maximised_comes_back_maximised(make_window):
     first = make_window()
     first.showMaximized()
-    first.close()
+    first.save_size()
     second = make_window()
     second.show()
     assert second.isMaximized()
@@ -264,19 +264,3 @@ def test_another_origin_in_an_iframe_loads_in_the_page(make_window, browser, oth
     make_window("frame.html").show()
     assert wait_until(lambda: "/inner.html" in other_site[1])
     assert browser.urls == []
-
-
-@pytest.fixture
-def pipe():
-    read_end, write_end = os.pipe()
-    with os.fdopen(read_end, "rb", buffering=0) as reader, os.fdopen(write_end, "wb", 0) as writer:
-        yield reader, writer
-
-
-def test_the_end_of_input_closes_the_window(make_window, pipe):
-    reader, writer = pipe
-    window = make_window()
-    CloseOnEndOfInput(reader.fileno(), window)
-    window.show()
-    writer.close()
-    assert wait_until(lambda: not window.isVisible())

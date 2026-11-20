@@ -56,6 +56,13 @@ def site(tmp_path_factory):
     server.server_close()
 
 
+@pytest.fixture(autouse=True)
+def config_home(tmp_path, monkeypatch):
+    """Window processes save their size here, not in the real ~/.config."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    return tmp_path / "config"
+
+
 @pytest.fixture(scope="module")
 def qt_app():
     app = QApplication(["window-test"])
@@ -150,6 +157,15 @@ def test_close_ends_the_window_process(make_window, page):
     window.close()
     assert not window.is_open()
     assert wait_until(lambda: window_processes() == [])
+
+
+def test_closing_the_window_saves_its_size(make_window, page, config_home):
+    window = make_window()
+    window.open()
+    assert wait_until(lambda: "/index.html" in page[1])
+    window.close()
+    assert wait_until(lambda: window_processes() == [])
+    assert (config_home / "markcom" / "App.conf").exists()
 
 
 def test_a_window_whose_process_ends_by_itself_is_closed(make_window, page):

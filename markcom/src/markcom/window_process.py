@@ -4,10 +4,9 @@ avoids Wayland showing a re-shown window at the wrong scale, which QtWebEngine s
 import logging
 import os
 import sys
-from typing import override
 
-from PySide6.QtCore import QByteArray, QObject, QSettings, QSocketNotifier, QUrl
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QIcon, QPalette
+from PySide6.QtCore import QByteArray, QSettings, QSocketNotifier, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon, QPalette
 from PySide6.QtWebEngineCore import (
     QWebEngineNavigationRequest,
     QWebEngineNewWindowRequest,
@@ -93,27 +92,9 @@ class OwnOriginWindow(QMainWindow):
         logger.info("Loading %s://%s:%d", start.scheme(), start.host(), start.port())
         view.load(start)
 
-    @override
-    def closeEvent(self, event: QCloseEvent) -> None:
+    def save_size(self) -> None:
         self._settings.setValue(GEOMETRY_KEY, self.saveGeometry())
         self._settings.sync()
-        super().closeEvent(event)
-
-
-class CloseOnEndOfInput(QObject):
-    """Closes the window when `fd` (stdin) ends: the app closed it or ended. The app never writes
-    to it, so any read event is the end. A child of the window, so it lives as long."""
-
-    def __init__(self, fd: int, window: QMainWindow) -> None:
-        super().__init__(window)
-        self._window: QMainWindow = window
-        self._notifier: QSocketNotifier = QSocketNotifier(fd, QSocketNotifier.Type.Read, self)
-        self._notifier.activated.connect(self._close)
-
-    def _close(self) -> None:
-        logger.info("The app closed the window")
-        self._notifier.setEnabled(False)
-        self._window.close()
 
 
 def main() -> None:
@@ -121,7 +102,12 @@ def main() -> None:
     configure_logging(spec.log_level)
     app: QApplication = QApplication([spec.title])
     window: OwnOriginWindow = OwnOriginWindow(spec, QSettings(ORGANISATION, spec.title))
-    CloseOnEndOfInput(sys.stdin.fileno(), window)
+    # The app never writes to stdin, so it turns readable only at its end: the app closed the
+    # window or ended.
+    QSocketNotifier(sys.stdin.fileno(), QSocketNotifier.Type.Read, window).activated.connect(
+        window.close
+    )
+    app.aboutToQuit.connect(window.save_size)
     window.show()
     app.exec()
     logger.info("The window process ends")
