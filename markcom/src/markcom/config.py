@@ -85,11 +85,11 @@ class TrayConfig(StrictModel):
 
 
 class WindowConfig(StrictModel):
-    """Web window's first size; each later window takes the last one's size and maximised state."""
+    """Web window's size until it has saved its own."""
 
     width: Pixels
     height: Pixels
-    # Seconds an open window's process gets to close as the app quits, before Qt kills it.
+    # app quitting: window process's time to close before Qt kills it
     close_wait_sec: Seconds
 
 

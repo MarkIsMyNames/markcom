@@ -116,7 +116,7 @@ def window_processes():
         # ended while being read
         except (FileNotFoundError, ProcessLookupError):
             continue
-        # the parent's PID is the second field after the command name, which may hold spaces
+        # stat: pid (command) state ppid; command may hold spaces
         parent = int(stat.rsplit(")", 1)[1].split()[1])
         if parent == os.getpid() and b"markcom.window_process" in command:
             found.append(process.name)

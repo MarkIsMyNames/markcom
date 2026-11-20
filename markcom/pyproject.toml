@@ -44,7 +44,6 @@ dev = [
     "pytest-asyncio>=1.5",
     "pytest-cov>=7.0",
     "ruff>=0.17",
-    "hypothesis>=6.170.17",
 ]
 
 [build-system]

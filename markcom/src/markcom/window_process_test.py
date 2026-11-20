@@ -7,14 +7,14 @@ from typing import override
 
 import pytest
 from pydantic import HttpUrl
-from PySide6.QtCore import QDeadlineTimer, QEvent, QEventLoop, QObject, QSize, QUrl, Slot
+from PySide6.QtCore import QDeadlineTimer, QEvent, QEventLoop, QObject, QSettings, QSize, QUrl, Slot
 from PySide6.QtGui import QColor, QDesktopServices, QImage, QPalette
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication
 
 from markcom.config import CONFIG
 from markcom.window_messages import WindowSpec
-from markcom.window_process import AppCommands, OwnOriginWindow
+from markcom.window_process import CloseOnEndOfInput, OwnOriginWindow
 
 # no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
 # pages.
@@ -124,24 +124,22 @@ def icon(tmp_path):
     return path
 
 
-def spec_for(url, icon, geometry=None):
-    return WindowSpec(
-        title="App", url=HttpUrl(url), icon=Path(icon), log_level="WARNING", geometry=geometry
-    )
+def spec_for(url, icon):
+    return WindowSpec(title="App", url=HttpUrl(url), icon=Path(icon), log_level="WARNING")
 
 
 @pytest.fixture
-def reports():
-    return []
+def settings(tmp_path):
+    return QSettings(str(tmp_path / "window.conf"), QSettings.Format.IniFormat)
 
 
 @pytest.fixture
-def make_window(request, site, icon, reports):
+def make_window(request, site, icon, settings):
     request.getfixturevalue("qt_app")
     windows = []
 
-    def make(page="index.html", geometry=None):
-        window = OwnOriginWindow(spec_for(f"{site}/{page}", icon, geometry), reports.append)
+    def make(page="index.html"):
+        window = OwnOriginWindow(spec_for(f"{site}/{page}", icon), settings)
         windows.append(window)
         return window
 
@@ -172,15 +170,14 @@ def click(window, link_id):
 
 def shown_home(make_window):
     window = make_window()
-    window.bring_back()
+    window.show()
     assert wait_until(lambda: view(window).title() == "Home")
     return window
 
 
-def test_bring_back_shows_the_page_under_the_title(make_window):
+def test_the_window_shows_the_page_under_the_title(make_window):
     window = make_window()
-    window.bring_back()
-    assert window.isVisible()
+    window.show()
     assert window.windowTitle() == "App"
     assert wait_until(lambda: view(window).title() == "Home")
 
@@ -203,62 +200,27 @@ def test_until_the_page_draws_the_window_shows_the_themes_content_colour(make_wi
 
 def test_a_first_window_opens_at_the_configured_size(make_window):
     window = make_window()
-    window.bring_back()
+    window.show()
     assert window.size() == QSize(CONFIG.window.width, CONFIG.window.height)
 
 
-def test_closing_reports_the_size_and_a_window_built_from_it_keeps_it(make_window, reports):
+def test_the_next_window_takes_the_last_ones_size(make_window):
     first = make_window()
-    first.bring_back()
+    first.show()
     first.resize(640, 480)
     first.close()
-    second = make_window(geometry=reports[-1].geometry)
-    second.bring_back()
+    second = make_window()
+    second.show()
     assert second.size() == QSize(640, 480)
 
 
-def test_a_resize_is_reported_before_the_window_closes(make_window, reports):
-    first = make_window()
-    first.bring_back()
-    first.resize(640, 480)
-    second = make_window(geometry=reports[-1].geometry)
-    second.bring_back()
-    assert second.size() == QSize(640, 480)
-
-
-def test_a_window_closed_maximised_comes_back_maximised(make_window, reports):
+def test_a_window_closed_maximised_comes_back_maximised(make_window):
     first = make_window()
     first.showMaximized()
     first.close()
-    second = make_window(geometry=reports[-1].geometry)
-    second.bring_back()
+    second = make_window()
+    second.show()
     assert second.isMaximized()
-
-
-def test_minimising_and_bringing_back_are_reported(make_window, reports):
-    window = make_window()
-    window.bring_back()
-    window.showMinimized()
-    assert reports[-1].minimised
-    window.bring_back()
-    assert not reports[-1].minimised
-
-
-def test_bring_back_restores_a_minimised_window(make_window):
-    window = make_window()
-    window.bring_back()
-    window.showMinimized()
-    window.bring_back()
-    assert window.isVisible()
-    assert not window.isMinimized()
-
-
-def test_a_window_minimised_while_maximised_comes_back_maximised(make_window):
-    window = make_window()
-    window.showMaximized()
-    window.showMinimized()
-    window.bring_back()
-    assert window.isMaximized()
 
 
 def test_a_same_origin_link_loads_in_the_window(make_window, browser):
@@ -299,7 +261,7 @@ def test_non_web_links_neither_load_nor_reach_the_desktop(make_window, browser, 
 
 
 def test_another_origin_in_an_iframe_loads_in_the_page(make_window, browser, other_site):
-    make_window("frame.html").bring_back()
+    make_window("frame.html").show()
     assert wait_until(lambda: "/inner.html" in other_site[1])
     assert browser.urls == []
 
@@ -311,34 +273,20 @@ def pipe():
         yield reader, writer
 
 
-def test_the_show_command_brings_the_window_back(make_window, pipe):
+def test_the_end_of_input_closes_the_window(make_window, pipe):
     reader, writer = pipe
     window = make_window()
-    AppCommands(reader.fileno(), window)
-    window.bring_back()
-    window.showMinimized()
-    writer.write(b"sh")
-    wait_until(lambda: False, QUIET_MS)
-    assert window.isMinimized()
-    writer.write(b"ow\n")
-    assert wait_until(lambda: not window.isMinimized())
-
-
-def test_the_end_of_the_apps_commands_closes_the_window(make_window, pipe, reports):
-    reader, writer = pipe
-    window = make_window()
-    AppCommands(reader.fileno(), window)
-    window.bring_back()
+    CloseOnEndOfInput(reader.fileno(), window)
+    window.show()
     writer.close()
     assert wait_until(lambda: not window.isVisible())
-    assert reports != []
 
 
-def test_an_unknown_command_leaves_the_window_as_it_is(make_window, pipe):
+def test_input_before_its_end_leaves_the_window_open(make_window, pipe):
     reader, writer = pipe
     window = make_window()
-    AppCommands(reader.fileno(), window)
-    window.bring_back()
-    writer.write(b"jump\n")
+    CloseOnEndOfInput(reader.fileno(), window)
+    window.show()
+    writer.write(b"anything\n")
     wait_until(lambda: False, QUIET_MS)
     assert window.isVisible()
