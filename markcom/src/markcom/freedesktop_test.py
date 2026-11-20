@@ -12,9 +12,9 @@ from markcom.freedesktop import (
     FreedesktopBackend,
     MissingDesktopEntryError,
     NotifyCall,
-    SessionBus,
     find_desktop_entry,
     install_desktop_entry,
+    notify_session_bus,
 )
 from markcom.notification_backend import NotificationError
 from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
@@ -69,7 +69,7 @@ def test_bus_that_hangs_up_raises_notification_error(monkeypatch, tmp_path):
     monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", f"unix:path={path}")
     call = NotifyCall("App", "app.png", "t", "m", Urgency.Normal, "app", 3000)
     with HangUpBus(path), pytest.raises(NotificationError):
-        SessionBus().notify(call)
+        notify_session_bus(call)
 
 
 def install(data_dir, desktop_entry):
@@ -80,7 +80,7 @@ def install(data_dir, desktop_entry):
 
 def sent_with(urgency=Urgency.Normal, display_sec=8, title="t", message="m"):
     bus = StubBus()
-    FreedesktopBackend("App", Path("app.png"), "org.example.App", bus).send(
+    FreedesktopBackend("App", Path("app.png"), "org.example.App", bus.notify).send(
         title, message, urgency, display_sec
     )
     return bus.calls[0]
@@ -177,7 +177,7 @@ def linux(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_DATA_DIRS", str(tmp_path / "system"))
     bus = StubBus()
-    monkeypatch.setattr(freedesktop, "SessionBus", lambda: bus)
+    monkeypatch.setattr(freedesktop, "notify_session_bus", bus.notify)
     return bus
 
 
@@ -202,13 +202,13 @@ def test_notifier_rejects_an_entry_that_is_not_installed():
 
 @pytest.mark.usefixtures("linux")
 def test_failed_linux_send_is_not_raised(monkeypatch):
-    monkeypatch.setattr(freedesktop, "SessionBus", lambda: StubBus(OSError("bus gone")))
+    monkeypatch.setattr(freedesktop, "notify_session_bus", StubBus(OSError("bus gone")).notify)
     DesktopNotifier("App", Path("app.png")).send("t", "m", Urgency.Normal, 8)
 
 
 @pytest.mark.usefixtures("linux")
 def test_linux_programming_errors_are_not_hidden(monkeypatch):
-    monkeypatch.setattr(freedesktop, "SessionBus", lambda: StubBus(KeyError("bug")))
+    monkeypatch.setattr(freedesktop, "notify_session_bus", StubBus(KeyError("bug")).notify)
     notifier = DesktopNotifier("App", Path("app.png"))
     with pytest.raises(KeyError):
         notifier.send("t", "m", Urgency.Normal, 8)
