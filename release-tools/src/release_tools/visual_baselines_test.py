@@ -71,7 +71,7 @@ def project(tmp_path, monkeypatch):
     made = Project(tmp_path)
     monkeypatch.chdir(made.path)
     monkeypatch.setenv("SNAPSHOTS_DIR", SNAPSHOTS)
-    monkeypatch.setenv("BRANCH", "feature")
+    monkeypatch.setenv("GITHUB_REF_NAME", "feature")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
     (tmp_path / "output").touch()
     monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "output"))

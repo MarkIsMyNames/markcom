@@ -15,14 +15,10 @@ on:
 
 env:
   SNAPSHOTS_DIR: visual/__snapshots__
-  # On a pull request, ref_name is its merge ref, not its branch.
-  BRANCH: ${{ github.head_ref || github.ref_name }}
 
 jobs:
   # The project's npm dependencies run here, with a read-only token.
   screenshots:
-    # A fork's pull request gets a read-only token, so it can't push.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,15 +26,15 @@ jobs:
       commit: ${{ steps.checkout.outputs.commit }}
     steps:
       - name: Refuse the default branch
-        if: github.ref_type == 'tag' || env.BRANCH == github.event.repository.default_branch
+        if: github.ref_type != 'branch' || github.ref_name == github.event.repository.default_branch
         run: |
-          echo "::error::Run this on a pull request branch, not ${BRANCH}"
+          echo "::error::Run this on a pull request branch, not ${GITHUB_REF_NAME}"
           exit 1
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The branch's newest commit, not the one it had when the run was queued.
-          ref: ${{ env.BRANCH }}
+          ref: ${{ github.ref_name }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -95,6 +91,6 @@ jobs:
           WORKFLOWS: ${{ inputs.workflows }}
         run: |
           for workflow in $WORKFLOWS; do
-            gh workflow run "$workflow" --ref "$BRANCH"
+            gh workflow run "$workflow" --ref "$GITHUB_REF_NAME"
             echo "Started $workflow" | tee -a "$GITHUB_STEP_SUMMARY"
           done
