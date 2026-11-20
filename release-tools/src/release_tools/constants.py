@@ -12,3 +12,12 @@ PUSH_HEAD_TO_MAIN = f"{HEAD}:{MAIN}"
 MAIN_BEFORE_MERGE = f"{HEAD}^1"
 
 VERSION_KEY = "version"
+
+# set in GitHub Actions: the event that started the run, and the files a step adds its outputs
+# and its Markdown summary to
+EVENT_VARIABLE = "GITHUB_EVENT_NAME"
+OUTPUT_VARIABLE = "GITHUB_OUTPUT"
+SUMMARY_VARIABLE = "GITHUB_STEP_SUMMARY"
+# set by the workflows: the repository's default branch
+DEFAULT_BRANCH_VARIABLE = "DEFAULT_BRANCH"
+PULL_REQUEST_EVENT = "pull_request"

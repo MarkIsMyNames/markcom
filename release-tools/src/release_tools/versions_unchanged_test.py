@@ -7,6 +7,24 @@ from release_tools.versions_unchanged import main
 # Versions are relative to whatever the clone holds: 0.0.1 is lower, 99.x higher.
 
 
+@pytest.fixture(autouse=True)
+def pull_request_event(monkeypatch):
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+
+
+@pytest.fixture
+def started_by_hand(monkeypatch):
+    """A run started with workflow_dispatch on a branch, as visual-baselines starts CI."""
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("DEFAULT_BRANCH", "main")
+
+
+def commit_on(clone, change):
+    change()
+    clone.repo.git.add("-A")
+    clone.repo.git.commit("--allow-empty", "-m", "branch commit")
+
+
 def test_unchanged_versions_pass(clone):
     clone.merge_pr(lambda: None)
     assert main() == 0
@@ -73,3 +91,22 @@ def test_library_new_in_the_pull_request_passes(clone, capsys):
     clone.merge_pr(add_library)
     assert main() == 0
     assert "newlib: 0.1.0, new" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("started_by_hand")
+def test_a_version_changed_earlier_on_the_branch_fails_a_run_started_by_hand(clone, capsys):
+    clone.repo.git.switch("-c", "pr")
+    commit_on(clone, lambda: clone.set_markcom_version("99.0.0"))
+    commit_on(clone, lambda: clone.append("README.md", "\nlater commit\n"))
+    assert main() == 1
+    assert "markcom: version changed from " in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("started_by_hand")
+def test_a_release_on_main_after_the_branch_left_passes_a_run_started_by_hand(clone):
+    clone.repo.git.switch("-c", "pr")
+    commit_on(clone, lambda: clone.append("README.md", "\nbranch commit\n"))
+    clone.repo.git.switch("main")
+    clone.push_to_main(lambda: clone.set_markcom_version("99.0.0"))
+    clone.repo.git.switch("pr")
+    assert main() == 0

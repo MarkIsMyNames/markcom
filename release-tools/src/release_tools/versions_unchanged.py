@@ -1,7 +1,11 @@
 """Pull request check: fails when a pull request changes a library's version. CI writes every
-version when it releases, sized by the pull request's labels. Run at GitHub's pull request merge
-commit, whose first parent is main."""
+version when it releases, sized by the pull request's labels. On a pull_request event it runs at
+GitHub's pull request merge commit, whose first parent is main. Started by hand on a branch
+(workflow_dispatch, as the visual-baselines workflow starts CI), it compares the branch with the
+point where it left the default branch, DEFAULT_BRANCH, so a change made earlier on the branch
+still fails."""
 
+import os
 from pathlib import Path
 
 from git import Repo
@@ -9,18 +13,33 @@ from markcom import NoSecrets, run
 from markcom.config import ConfigError
 
 from release_tools.config import CONFIG_PATH, Labels, ToolConfig
-from release_tools.constants import HEAD, MAIN_BEFORE_MERGE
+from release_tools.constants import (
+    DEFAULT_BRANCH_VARIABLE,
+    EVENT_VARIABLE,
+    HEAD,
+    MAIN_BEFORE_MERGE,
+    PULL_REQUEST_EVENT,
+    REMOTE,
+)
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
 
 
-def _check(repo: Repo, library: Library, labels: Labels) -> bool:
+def _base(repo: Repo) -> str:
+    """The commit the versions are compared with."""
+    if os.environ[EVENT_VARIABLE] == PULL_REQUEST_EVENT:
+        return MAIN_BEFORE_MERGE
+    default_branch = f"{REMOTE}/{os.environ[DEFAULT_BRANCH_VARIABLE]}"
+    return repo.merge_base(HEAD, default_branch)[0].hexsha
+
+
+def _check(repo: Repo, library: Library, labels: Labels, base: str) -> bool:
     try:
         after = library.version_at(repo, HEAD)
-        if not library.exists_at(repo, MAIN_BEFORE_MERGE):
+        if not library.exists_at(repo, base):
             say(f"{library.name}: {after}, new")
             return True
-        before = library.version_at(repo, MAIN_BEFORE_MERGE)
+        before = library.version_at(repo, base)
     except VersionError as failure:
         error(str(failure))
         return False
@@ -39,7 +58,8 @@ def _check_all(config: ToolConfig, _secrets: NoSecrets) -> bool:
     repo = Repo(search_parent_directories=True)
     libraries = load_libraries(Path(repo.working_dir), config.release_config)
     # every library is checked and reported, not just those up to the first failure
-    results = [_check(repo, library, config.labels) for library in libraries]
+    base = _base(repo)
+    results = [_check(repo, library, config.labels, base) for library in libraries]
     return all(results)
 
 
