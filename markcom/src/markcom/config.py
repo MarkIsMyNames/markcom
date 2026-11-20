@@ -89,7 +89,7 @@ class WindowConfig(StrictModel):
 
     width: Pixels
     height: Pixels
-    # app quitting: window process's time to close before Qt kills it
+    # Time a closing window process gets to end before it is killed.
     close_wait_sec: Seconds
 
 

@@ -34,14 +34,12 @@ class WebWindow(TrayTarget):
         )
         # None: no window open
         self._process: QProcess | None = None
-        # Deleting a QProcess kills its process, so closed ones are kept until they end.
-        self._ending: set[QProcess] = set()
         app: QCoreApplication | None = QApplication.instance()
         if app is None:
             no_app: str = "build the WebWindow after the QApplication"
             raise RuntimeError(no_app)
         # Otherwise Qt kills a running window process at exit.
-        app.aboutToQuit.connect(self._end_on_quit)
+        app.aboutToQuit.connect(self.close)
 
     @override
     def is_open(self) -> bool:
@@ -69,10 +67,16 @@ class WebWindow(TrayTarget):
             logger.debug("No window to close")
             return
         logger.debug("Closing the window")
-        self._ending.add(self._process)
+        process: QProcess = self._process
         # The end of its input closes the window, and its process ends.
-        self._process.closeWriteChannel()
-        self._process = None
+        process.closeWriteChannel()
+        if not process.waitForFinished(int(CONFIG.window.close_wait_sec * MS_PER_SEC)):
+            logger.warning(
+                "The window process did not end within %s s, so it is killed",
+                CONFIG.window.close_wait_sec,
+            )
+            process.kill()
+            process.waitForFinished()
 
     def _new_process(self) -> QProcess:
         environment: QProcessEnvironment = QProcessEnvironment.systemEnvironment()
@@ -100,25 +104,11 @@ class WebWindow(TrayTarget):
             self._ended(process)
 
     def _ended(self, process: QProcess) -> None:
-        self._ending.discard(process)
-        # Closed from its title bar, or failed.
-        if process is self._process:
-            self._process = None
+        self._process = None
         process.deleteLater()
         # As for Qt's own windows: without a tray, closing the last window quits the app.
-        if (
-            QApplication.quitOnLastWindowClosed()
-            and self._process is None
-            and not any(window.isVisible() for window in QApplication.topLevelWindows())
+        if QApplication.quitOnLastWindowClosed() and not any(
+            window.isVisible() for window in QApplication.topLevelWindows()
         ):
             logger.info("The last window closed, so the app quits")
             QApplication.quit()
-
-    def _end_on_quit(self) -> None:
-        self.close()
-        for process in tuple(self._ending):
-            if not process.waitForFinished(int(CONFIG.window.close_wait_sec * MS_PER_SEC)):
-                logger.warning(
-                    "The window process did not end within %s s, so Qt kills it",
-                    CONFIG.window.close_wait_sec,
-                )

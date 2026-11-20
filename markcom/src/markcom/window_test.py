@@ -150,13 +150,13 @@ def test_the_page_loads_on_the_first_open_not_before(make_window, page):
     assert wait_until(lambda: "/index.html" in page[1])
 
 
-def test_close_ends_the_window_process(make_window, page):
+def test_close_returns_once_the_window_process_has_ended(make_window, page):
     window = make_window()
     window.open()
     assert wait_until(lambda: "/index.html" in page[1])
     window.close()
     assert not window.is_open()
-    assert wait_until(lambda: window_processes() == [])
+    assert window_processes() == []
 
 
 def test_closing_the_window_saves_its_size(make_window, page, config_home):
