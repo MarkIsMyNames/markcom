@@ -28,6 +28,8 @@ class ToolConfig(BaseAppConfig):
     release_config: str
     labels: Labels
     release_commit_prefix: str
+    # the visual-baselines workflow's commit
+    baselines_commit_message: str
     bot: Bot
 
 
