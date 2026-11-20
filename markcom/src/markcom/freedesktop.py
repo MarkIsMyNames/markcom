@@ -34,6 +34,8 @@ NOTIFY: str = "Notify"
 NOTIFY_SIGNATURE: str = "susssasa{sv}i"
 # replaces_id 0: a new notification, not a replacement
 NEW_NOTIFICATION: int = 0
+# Notify's reply holds one value, the notification's ID
+NOTIFICATION_ID_INDEX: int = 0
 DESKTOP_ENTRY_HINT: str = "desktop-entry"
 URGENCY_HINT: str = "urgency"
 # D-Bus type codes of the two hints
@@ -111,7 +113,7 @@ async def _call_notify(call: NotifyCall) -> int:
     if reply.message_type is MessageType.ERROR:
         rejected: str = f"{reply.error_name}: {reply.body}"
         raise NotificationError(rejected)
-    notification_id: int = reply.body[0]
+    notification_id: int = reply.body[NOTIFICATION_ID_INDEX]
     return notification_id
 
 
