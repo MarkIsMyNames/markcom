@@ -1,18 +1,20 @@
 """Linux notifications: Notify over D-Bus with a `desktop-entry` hint and a matching .desktop
 file, which KDE Plasma needs before it keeps a timed-out notification in its history."""
 
+import asyncio
 import configparser
 import logging
 from collections.abc import Sequence
-from contextlib import closing
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
 from typing import Protocol, override
 
+from dbus_fast import BusType, Message, MessageType, Variant
+from dbus_fast.aio import MessageBus
+from dbus_fast.errors import DBusFastError
 from desktop_notifier import Urgency
-from sdbus import SdBusBaseError, sd_bus_open_user
-from sdbus_block.notifications import FreedesktopNotifications
 from slugify import slugify
 from xdg_base_dirs import xdg_data_dirs, xdg_data_home
 
@@ -25,6 +27,22 @@ MS_PER_SEC: int = 1000
 ENTRY_SECTION: str = "Desktop Entry"
 APPLICATIONS: str = "applications"
 DESKTOP_SUFFIX: str = ".desktop"
+NOTIFICATIONS_NAME: str = "org.freedesktop.Notifications"
+NOTIFICATIONS_PATH: str = "/org/freedesktop/Notifications"
+NOTIFY: str = "Notify"
+# app_name, replaces_id, app_icon, summary, body, actions, hints, expire_timeout
+NOTIFY_SIGNATURE: str = "susssasa{sv}i"
+# replaces_id 0: a new notification, not a replacement
+NEW_NOTIFICATION: int = 0
+# Notify's reply holds one value, the notification's ID
+NOTIFICATION_ID_INDEX: int = 0
+DESKTOP_ENTRY_HINT: str = "desktop-entry"
+URGENCY_HINT: str = "urgency"
+# D-Bus type codes of the two hints
+STRING_TYPE: str = "s"
+BYTE_TYPE: str = "y"
+# What a failed connection or call raises; EOFError when the bus hangs up mid-call.
+DBUS_ERRORS: tuple[type[Exception], ...] = (DBusFastError, EOFError)
 # A malformed or non-UTF-8 existing .desktop file is left as it is: it may be another app's.
 DESKTOP_FILE_ERRORS: tuple[type[Exception], ...] = (
     OSError,
@@ -55,26 +73,61 @@ class NotificationBus(Protocol):
     def notify(self, call: NotifyCall) -> None: ...
 
 
+class SessionConnection:
+    """The user's session bus, connected for one `async with` block."""
+
+    def __init__(self) -> None:
+        self._bus: MessageBus = MessageBus(bus_type=BusType.SESSION)
+
+    async def __aenter__(self) -> MessageBus:
+        return await self._bus.connect()
+
+    async def __aexit__(self, *_: object) -> None:
+        self._bus.disconnect()
+
+
+async def _call_notify(call: NotifyCall) -> int:
+    async with SessionConnection() as bus:
+        reply: Message = await bus.call(
+            Message(
+                destination=NOTIFICATIONS_NAME,
+                path=NOTIFICATIONS_PATH,
+                interface=NOTIFICATIONS_NAME,
+                member=NOTIFY,
+                signature=NOTIFY_SIGNATURE,
+                body=[
+                    call.app_name,
+                    NEW_NOTIFICATION,
+                    call.icon,
+                    call.title,
+                    call.message,
+                    [],
+                    {
+                        DESKTOP_ENTRY_HINT: Variant(STRING_TYPE, call.desktop_entry),
+                        URGENCY_HINT: Variant(BYTE_TYPE, FreedesktopUrgency[call.urgency.name]),
+                    },
+                    call.timeout_ms,
+                ],
+            )
+        )
+    if reply.message_type is MessageType.ERROR:
+        rejected: str = f"{reply.error_name}: {reply.body}"
+        raise NotificationError(rejected)
+    notification_id: int = reply.body[NOTIFICATION_ID_INDEX]
+    return notification_id
+
+
 class SessionBus(NotificationBus):
     @override
     def notify(self, call: NotifyCall) -> None:
-        try:
-            with closing(sd_bus_open_user()) as bus:
-                notifications: FreedesktopNotifications = FreedesktopNotifications(bus)
-                notification_id: int = notifications.notify(
-                    app_name=call.app_name,
-                    app_icon=call.icon,
-                    summary=call.title,
-                    body=call.message,
-                    hints=notifications.create_hints(
-                        desktop_entry_name=call.desktop_entry,
-                        urgency=FreedesktopUrgency[call.urgency.name],
-                    ),
-                    expire_timeout=call.timeout_ms,
-                )
-                logger.debug("bus showed notification %d", notification_id)
-        except SdBusBaseError as error:
-            raise NotificationError(str(error)) from error
+        # dbus-fast is async only; its own loop on a worker thread works whether or not the
+        # caller's thread already runs one, as uvicorn's does
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            try:
+                notification_id: int = worker.submit(asyncio.run, _call_notify(call)).result()
+            except DBUS_ERRORS as error:
+                raise NotificationError(str(error)) from error
+        logger.debug("bus showed notification %d", notification_id)
 
 
 class MissingDesktopEntryError(ValueError): ...

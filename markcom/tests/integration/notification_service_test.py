@@ -56,7 +56,7 @@ def run_service(reply, events, stop):
 
 class FakeNotificationService:
     """Owns org.freedesktop.Notifications in its own process, as a real one does: run as a
-    thread of the test process, it never received sdbus's blocking call."""
+    thread of the test process, it never received markcom's blocking call."""
 
     def __init__(self, reply):
         self._events = multiprocessing.Queue()
@@ -137,6 +137,12 @@ def test_app_with_an_entry_names_its_own_file(service, data_folders):
 def test_rejected_notification_is_not_raised():
     with FakeNotificationService(reject) as service:
         DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
+    assert service.next_call()
+
+
+@pytest.mark.usefixtures("data_folders")
+async def test_notification_sent_from_inside_an_event_loop_arrives(service):
+    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
     assert service.next_call()
 
 

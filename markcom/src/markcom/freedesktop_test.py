@@ -1,4 +1,6 @@
 import platform
+import socket
+import threading
 from pathlib import Path
 
 import pytest
@@ -9,9 +11,12 @@ from markcom.freedesktop import (
     DesktopEntryConflictError,
     FreedesktopBackend,
     MissingDesktopEntryError,
+    NotifyCall,
+    SessionBus,
     find_desktop_entry,
     install_desktop_entry,
 )
+from markcom.notification_backend import NotificationError
 from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
 
 
@@ -26,6 +31,45 @@ class StubBus:
         if self._failure is not None:
             raise self._failure
         self.calls.append(call)
+
+
+class HangUpBus:
+    """A session bus that accepts one client, reads all it sends, then hangs up."""
+
+    def __init__(self, path):
+        self._server = socket.socket(socket.AF_UNIX)
+        self._server.bind(str(path))
+        self._server.listen()
+        # daemon: a client that never connects leaves it blocked in accept()
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+
+    def _serve(self):
+        connection, _ = self._server.accept()
+        with connection:
+            connection.recv(4096)
+            connection.sendall(b"OK 0123456789abcdef0123456789abcdef\r\n")
+            connection.settimeout(0.5)
+            try:
+                while connection.recv(4096):
+                    pass
+            except TimeoutError:
+                pass
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self._thread.join(timeout=5)
+        self._server.close()
+
+
+def test_bus_that_hangs_up_raises_notification_error(monkeypatch, tmp_path):
+    path = tmp_path / "bus"
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", f"unix:path={path}")
+    call = NotifyCall("App", "app.png", "t", "m", Urgency.Normal, "app", 3000)
+    with HangUpBus(path), pytest.raises(NotificationError):
+        SessionBus().notify(call)
 
 
 def install(data_dir, desktop_entry):

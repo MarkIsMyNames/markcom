@@ -11,10 +11,9 @@ dependencies = [
 [project.optional-dependencies]
 # Desktop notifications (markcom.notifier); no Qt, so notification-only apps stay small.
 desktop = [
+    "dbus-fast>=5.2.0",
     "desktop-notifier>=6.2",
     "python-slugify>=9.2.0",
-    "sdbus>=0.14.3",
-    "sdbus-notifications>=1.0.3",
     "xdg-base-dirs>=6.1.0",
 ]
 # Tray and web window (markcom.tray, markcom.window): every tray app has a window.
@@ -45,7 +44,6 @@ dev = [
     "pytest-asyncio>=1.5",
     "pytest-cov>=7.0",
     "ruff>=0.17",
-    "dbus-fast>=5.2.0",
 ]
 
 [build-system]
