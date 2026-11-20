@@ -6,7 +6,7 @@ Shared libraries for my Python and TypeScript projects.
 |---|---|---|
 | `markcom/` | `markcom` (Python, installed from git) | typed `config.json`, secrets from the environment and the `.env` beside `config.json`, logging and the `run()` entry point; with the `desktop` extra, notifications; with the `window` extra, a tray icon and a web frontend in its own window (`markcom.tray`, `markcom.window`); with the `web` extra, a loopback Host/Origin guard (`markcom.own_origin`); with the `nicegui` extra, a NiceGUI UI served on its own thread (`markcom.ui_server`, `markcom.page_refresh`) |
 | `markcom-i18n/` | `@markcom/i18n` (npm) | locale lookup, browser-language detection, i18next set-up, the `index.html` locale plugin, `/<lang>/` routing, and build-time checks of every locale file; its `e2e/` tests the routing on a small test site |
-| `markcom-web-config/` | `@markcom/web-config` (npm) | shared ESLint, Prettier, TypeScript and Vitest coverage settings |
+| `markcom-web-config/` | `@markcom/web-config` (npm) | shared ESLint, Prettier, TypeScript, Vitest coverage and Playwright settings, and the test that screenshots every Storybook story |
 
 ## Installing
 
@@ -37,7 +37,8 @@ npm install --save-dev @markcom/web-config
 
 - **Renovate preset** (`default.json`): every repository's `renovate.json` is only `{"extends": ["github>MarkIsMyNames/markcom"]}`, so a rule changed here applies everywhere.
 - **Security workflow** (`.github/workflows/security.yml`): Gitleaks and Semgrep. A CI workflow calls it with `uses: MarkIsMyNames/markcom/.github/workflows/security.yml@<commit sha> # main`, granting `contents: read` and `pull-requests: read`; Renovate keeps the commit up to date.
-- **Visual baselines workflow** (`.github/workflows/visual-baselines.yml`): started by hand on a pull request branch of a project with Storybook screenshot tests. It compares every screenshot with the default branch's baseline, commits only the images that differ, and lists them in the run summary. A push with `GITHUB_TOKEN` starts no workflows, so it starts the workflows the caller lists, each with a `workflow_dispatch` trigger. ClaudeSkills' react-ui template calls it.
+- **UI tests workflow** (`.github/workflows/ui-tests.yml`): for a project with Storybook, the accessibility check and the comparison of every story's screenshot with its committed baseline, on each push and pull request.
+- **Visual baselines workflow** (`.github/workflows/visual-baselines.yml`): started by hand on a pull request branch after an intended visual change. It compares every screenshot with main's baseline, commits only the images that differ, and lists them in the run summary. A push with `GITHUB_TOKEN` starts no workflows, so it starts the workflows the caller lists, each with a `workflow_dispatch` trigger. ClaudeSkills' react-ui template calls both.
 
 ## Releasing
 

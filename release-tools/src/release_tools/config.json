@@ -6,7 +6,6 @@
     "major": "release:major"
   },
   "release_commit_prefix": "chore(release): ",
-  "baselines_commit_message": "test(visual): update baselines",
   "bot": {
     "name": "github-actions[bot]",
     "email": "41898282+github-actions[bot]@users.noreply.github.com"

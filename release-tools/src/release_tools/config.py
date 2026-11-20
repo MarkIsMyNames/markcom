@@ -28,7 +28,6 @@ class ToolConfig(BaseAppConfig):
     release_config: str
     labels: Labels
     release_commit_prefix: str
-    baselines_commit_message: str
     bot: Bot
 
 
