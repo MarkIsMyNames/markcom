@@ -1,6 +1,6 @@
 [project]
 name = "release-tools"
-version = "0.1.1"
+version = "0.1.2"
 description = "CI's scripts: the version check on pull requests and the release on main, for this repository's libraries, and the visual-baselines workflow's git steps."
 requires-python = ">=3.13"
 dependencies = [
