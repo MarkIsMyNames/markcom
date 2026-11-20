@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  # markcom, the Python start-up library.
   markcom:
     runs-on: ubuntu-latest
     defaults:
@@ -33,8 +32,7 @@ jobs:
       - name: Tests with coverage gate
         run: uv run pytest -q
 
-  # markcom's Linux notifications sent over a real D-Bus session, to a fake notification
-  # service the tests run. A job of its own, so the unit tests stay fast.
+  # A job of its own, so the unit tests stay fast.
   markcom-integration:
     runs-on: ubuntu-latest
     defaults:
@@ -51,8 +49,7 @@ jobs:
       - name: Integration tests
         run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
 
-  # release-tools, CI's release scripts. The tests clone this repository, so they need every
-  # commit and tag.
+  # The tests clone this repository, so they need every commit and tag.
   release-tools:
     runs-on: ubuntu-latest
     defaults:
@@ -78,16 +75,13 @@ jobs:
       - name: Tests with coverage gate
         run: uv run pytest -q
 
-  # On every pull request, fails when it changes a library's version: the release writes every
-  # version.
   versions-unchanged:
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/versions-unchanged.yml
     permissions:
       contents: read
 
-  # The TypeScript libraries the react-ui websites install from npm. web-config is built
-  # first because markcom-i18n lints itself with it.
+  # web-config is built first because markcom-i18n lints itself with it.
   web-libraries:
     runs-on: ubuntu-latest
     strategy:
@@ -131,11 +125,6 @@ jobs:
         if: matrix.library == 'markcom-i18n'
         run: npm run test:e2e
 
-  # On every push to main (a merged PR included), releases each library release.json lists whose
-  # code changed since its latest tag: the tag's next version, sized by the merged PR's
-  # release:minor or release:major label (a patch without one), is committed to main and tagged
-  # <library>-v<version>, with a GitHub release. markcom's tag is what projects install it by and
-  # Renovate watches. It fails if main has moved past its commit; the newest commit's run releases.
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [markcom, markcom-integration, web-libraries, release-tools]
@@ -144,10 +133,7 @@ jobs:
       contents: write
       pull-requests: read
 
-  # After the release job, publishes each web library's latest tag when npm doesn't have that
-  # version yet, so a publish that failed is retried by the next run. It signs in to npm by
-  # trusted publishing, set up on each package's npm settings page for this repository and
-  # ci.yml.
+  # Publishes any latest tag npm lacks, so a failed publish is retried by the next run.
   publish-web-libraries:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: release

@@ -56,7 +56,7 @@ Never edit a version, run `npm publish` or push a release tag by hand: the `vers
 `release-tools/` is itself a library, released as `release-tools-v<version>`, and its two workflows are shared like the security workflow:
 
 1. Add a `release.json` at the repository root listing its libraries. Each library has `name`, `kind` (`uv` or `npm`), `path` (its folder, `.` for the root), `tag_prefix` (for example `v`) and `extra_code` (files of its code outside `src`, usually `[]`).
-2. Call `.github/workflows/versions-unchanged.yml` on every event but pushes and `.github/workflows/release.yml` on pushes to `main` after the checks, pinned to the commit of a `release-tools-v*` tag; each file's header shows the job to copy. The release workflow's `tags` output lists what it released, for publish or deploy jobs.
+2. Call `.github/workflows/versions-unchanged.yml` on every event but pushes and `.github/workflows/release.yml` on pushes to `main` after the checks, pinned to the commit of a `release-tools-v*` tag, as ClaudeSkills' base template's `ci.yml` does. The release workflow's `tags` output lists what it released, for publish or deploy jobs.
 3. Create the `release:minor` and `release:major` labels (`gh label create`).
 
 ## Checks

@@ -1,12 +1,4 @@
-# Fails a pull request that changes the version of a library its repository's release.json
-# lists: the release workflow writes every version. A repository calls it on pull requests, and on
-# runs started by hand such as visual-baselines.yml's:
-#
-#   versions-unchanged:
-#     if: github.event_name != 'push'
-#     uses: MarkIsMyNames/markcom/.github/workflows/versions-unchanged.yml@<commit sha> # release-tools-v<version>
-#     permissions:
-#       contents: read
+# The release workflow writes every version, so a branch must leave versions alone.
 name: Versions unchanged
 
 on:

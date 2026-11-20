@@ -7,7 +7,6 @@ ENCODING = "utf-8"
 REMOTE = "origin"
 MAIN = "main"
 REMOTE_MAIN = f"{REMOTE}/{MAIN}"
-# the commit a run is for: the pushed commit, a pull request's merge commit or a branch head
 HEAD = "HEAD"
 PUSH_HEAD_TO_MAIN = f"{HEAD}:{MAIN}"
 FETCHED = "FETCH_HEAD"

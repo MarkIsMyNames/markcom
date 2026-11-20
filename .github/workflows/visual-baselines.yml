@@ -1,5 +1,4 @@
-# Called on each pull request, and by hand to redo one. A push with GITHUB_TOKEN starts no
-# workflows, so this starts `workflows` itself; each needs a workflow_dispatch trigger.
+# A push with GITHUB_TOKEN starts no workflows, so this starts `workflows` itself.
 name: Visual baselines
 
 on:
@@ -16,7 +15,7 @@ on:
 
 env:
   SNAPSHOTS_DIR: visual/__snapshots__
-  # The pull request's branch, or the branch a run by hand was started on.
+  # On a pull request, ref_name is its merge ref, not its branch.
   BRANCH: ${{ github.head_ref || github.ref_name }}
 
 jobs:
