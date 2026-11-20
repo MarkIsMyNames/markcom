@@ -1,7 +1,7 @@
 [project]
 name = "release-tools"
 version = "0.1.2"
-description = "CI's scripts: the version check on pull requests and the release on main, for this repository's libraries, and the visual-baselines workflow's git steps."
+description = "CI's release scripts for this repository's libraries: the version check on pull requests and the release on main."
 requires-python = ">=3.13"
 dependencies = [
     "gitpython>=3.2.1",
@@ -12,8 +12,6 @@ dependencies = [
 [project.scripts]
 versions-unchanged = "release_tools.versions_unchanged:main"
 release = "release_tools.release:main"
-visual-baselines-restore = "release_tools.visual_baselines:restore"
-visual-baselines-commit = "release_tools.visual_baselines:commit"
 
 [build-system]
 requires = ["hatchling"]
