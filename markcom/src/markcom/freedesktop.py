@@ -4,12 +4,12 @@ file, which KDE Plasma needs before it keeps a timed-out notification in its his
 import asyncio
 import configparser
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import override
+from typing import Protocol, override
 
 from dbus_fast import BusType, Message, MessageType, Variant
 from dbus_fast.aio import MessageBus
@@ -67,8 +67,8 @@ class NotifyCall:
     timeout_ms: int
 
 
-# Sends one Notify call; FreedesktopBackend takes it, so another can stand in.
-type NotifySender = Callable[[NotifyCall], None]
+class NotificationBus(Protocol):
+    def notify(self, call: NotifyCall) -> None: ...
 
 
 class SessionConnection:
@@ -115,15 +115,17 @@ async def _call_notify(call: NotifyCall) -> int:
     return notification_id
 
 
-def notify_session_bus(call: NotifyCall) -> None:
-    # dbus-fast is async only; its own loop on a worker thread works whether or not the
-    # caller's thread already runs one, as uvicorn's does
-    with ThreadPoolExecutor(max_workers=1) as worker:
-        try:
-            notification_id: int = worker.submit(asyncio.run, _call_notify(call)).result()
-        except DBUS_ERRORS as error:
-            raise NotificationError(str(error)) from error
-    logger.debug("bus showed notification %d", notification_id)
+class SessionBus(NotificationBus):
+    @override
+    def notify(self, call: NotifyCall) -> None:
+        # dbus-fast is async only; its own loop on a worker thread works whether or not the
+        # caller's thread already runs one, as uvicorn's does
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            try:
+                notification_id: int = worker.submit(asyncio.run, _call_notify(call)).result()
+            except DBUS_ERRORS as error:
+                raise NotificationError(str(error)) from error
+        logger.debug("bus showed notification %d", notification_id)
 
 
 class MissingDesktopEntryError(ValueError): ...
@@ -133,18 +135,18 @@ class DesktopEntryConflictError(ValueError): ...
 
 
 class FreedesktopBackend(NotificationBackend):
-    def __init__(self, app_name: str, icon: Path, desktop_entry: str, notify: NotifySender) -> None:
+    def __init__(self, app_name: str, icon: Path, desktop_entry: str, bus: NotificationBus) -> None:
         self._app_name: str = app_name
         self._icon: str = str(icon.resolve())
         self._desktop_entry: str = desktop_entry
-        self._notify: NotifySender = notify
+        self._bus: NotificationBus = bus
 
     @override
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         logger.debug(
             "notifying %r as %s, urgency %s, %d s", title, self._desktop_entry, urgency, display_sec
         )
-        self._notify(
+        self._bus.notify(
             NotifyCall(
                 self._app_name,
                 self._icon,
@@ -223,4 +225,4 @@ def open_backend(app_name: str, icon: Path, desktop_entry: str | None) -> Notifi
         else find_desktop_entry(desktop_entry, [xdg_data_home(), *xdg_data_dirs()])
     )
     logger.info("notifications name the desktop entry %s", entry)
-    return FreedesktopBackend(app_name, icon, entry, notify_session_bus)
+    return FreedesktopBackend(app_name, icon, entry, SessionBus())
