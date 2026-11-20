@@ -11,7 +11,7 @@ Always reply in caveman mode (the `caveman` skill), from the first reply to the 
 | Folder | What | Checks |
 |---|---|---|
 | `markcom/` | Python library (uv), installed by git tag | `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy src`, `uv run bandit -q -r src -x '*_test.py'`, `uv run pip-audit --skip-editable`, `uv run pytest -q` |
-| `markcom-web-config/` | npm: shared ESLint, Prettier, TypeScript, Vitest and Playwright settings | `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run build`, `npm run audit` |
+| `markcom-web-config/` | npm: shared ESLint, Prettier, TypeScript, Vitest, Playwright and Storybook settings | `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run build`, `npm run audit` |
 | `markcom-i18n/` | npm: locales, i18next and routing | as web-config, plus `npm test` and `npm run test:e2e`; build web-config first (`npm ci && npm run build` there), as i18n lints with it |
 | `release-tools/` | Python (uv): the release tool, shared with other repositories through `.github/workflows/release.yml` | as markcom, with `uv run bandit -q -r src -c pyproject.toml` |
 

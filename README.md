@@ -6,7 +6,7 @@ Shared libraries for my Python and TypeScript projects.
 |---|---|---|
 | `markcom/` | `markcom` (Python, installed from git) | typed `config.json`, secrets from the environment and the `.env` beside `config.json`, logging and the `run()` entry point; with the `desktop` extra, notifications; with the `window` extra, a tray icon and a web frontend in its own window (`markcom.tray`, `markcom.window`); with the `web` extra, a loopback Host/Origin guard (`markcom.own_origin`); with the `nicegui` extra, a NiceGUI UI served on its own thread (`markcom.ui_server`, `markcom.page_refresh`) |
 | `markcom-i18n/` | `@markcom/i18n` (npm) | locale lookup, browser-language detection, i18next set-up, the `index.html` locale plugin, `/<lang>/` routing, and build-time checks of every locale file; its `e2e/` tests the routing on a small test site |
-| `markcom-web-config/` | `@markcom/web-config` (npm) | shared ESLint, Prettier, TypeScript, Vitest coverage and Playwright settings, and the test that screenshots every Storybook story |
+| `markcom-web-config/` | `@markcom/web-config` (npm) | shared ESLint, Prettier, TypeScript, Vitest coverage, Playwright and Storybook settings, and the test that screenshots every Storybook story |
 
 ## Installing
 
