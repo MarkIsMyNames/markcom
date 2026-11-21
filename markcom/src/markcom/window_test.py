@@ -1,6 +1,7 @@
 import multiprocessing
 import os
 import signal
+import socket
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -211,6 +212,39 @@ def test_the_page_address_is_not_on_the_window_processs_command_line(page, icon)
     finally:
         window.close()
         assert wait_until(lambda: window_processes() == [])
+
+
+@pytest.fixture
+def silent_server():
+    """Accepts connections but never answers, so a page never finishes loading."""
+    server = socket.create_server(("127.0.0.1", 0))
+    accepted = []
+
+    def accept():
+        while True:
+            try:
+                accepted.append(server.accept()[0])
+            except OSError:
+                return
+
+    threading.Thread(target=accept, daemon=True).start()
+    yield f"http://127.0.0.1:{server.getsockname()[1]}/", accepted
+    server.shutdown(socket.SHUT_RDWR)
+    server.close()
+    for connection in accepted:
+        connection.close()
+
+
+@pytest.mark.usefixtures("qt_app")
+def test_closing_before_the_page_loads_ends_the_process_cleanly(silent_server, icon, config_home):
+    url, accepted = silent_server
+    window = WebWindow("App", HttpUrl(url), icon)
+    window.open()
+    assert wait_until(lambda: accepted != [])
+    window.close()
+    assert window_processes() == []
+    # a killed process saves nothing
+    assert (config_home / "markcom" / "App.conf").exists()
 
 
 class QuitOnRequest(SimpleHTTPRequestHandler):

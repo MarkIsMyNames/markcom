@@ -138,8 +138,8 @@ def make_window(request, site, icon, settings):
     request.getfixturevalue("qt_app")
     windows = []
 
-    def make(page="index.html"):
-        window = OwnOriginWindow(spec_for(f"{site}/{page}", icon), settings)
+    def make(page="index.html", base=site):
+        window = OwnOriginWindow(spec_for(f"{base}/{page}", icon), settings)
         windows.append(window)
         return window
 
@@ -170,16 +170,27 @@ def click(window, link_id):
 
 def shown_home(make_window):
     window = make_window()
-    window.show()
     assert wait_until(lambda: view(window).title() == "Home")
     return window
 
 
 def test_the_window_shows_the_page_under_the_title(make_window):
     window = make_window()
-    window.show()
     assert window.windowTitle() == "App"
     assert wait_until(lambda: view(window).title() == "Home")
+
+
+def test_the_window_stays_hidden_until_its_page_loads(make_window):
+    window = make_window()
+    assert not window.isVisible()
+    assert wait_until(window.isVisible)
+    assert view(window).title() == "Home"
+
+
+def test_a_page_that_fails_to_load_still_shows_the_window(make_window):
+    # port 9 (discard): nothing listens, so the load fails
+    window = make_window(base="http://127.0.0.1:9")
+    assert wait_until(window.isVisible)
 
 
 @pytest.fixture
@@ -261,6 +272,6 @@ def test_non_web_links_neither_load_nor_reach_the_desktop(make_window, browser, 
 
 
 def test_another_origin_in_an_iframe_loads_in_the_page(make_window, browser, other_site):
-    make_window("frame.html").show()
+    make_window("frame.html")
     assert wait_until(lambda: "/inner.html" in other_site[1])
     assert browser.urls == []
