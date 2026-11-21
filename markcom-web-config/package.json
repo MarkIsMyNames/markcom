@@ -1,7 +1,7 @@
 {
   "name": "@markcom/web-config",
   "version": "0.1.6",
-  "description": "Shared ESLint, Prettier, TypeScript, Vitest coverage and Playwright settings for the react-ui websites.",
+  "description": "Shared ESLint, Prettier, TypeScript, Vitest coverage, Playwright and Storybook settings for the react-ui websites.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,6 +27,10 @@
       "default": "./dist/playwright.mjs"
     },
     "./prettier": "./prettier.json",
+    "./storybook": {
+      "types": "./dist/storybook.d.mts",
+      "default": "./dist/storybook.mjs"
+    },
     "./vitest": {
       "types": "./dist/vitest.d.mts",
       "default": "./dist/vitest.mjs"
@@ -35,7 +39,7 @@
   },
   "prettier": "./prettier.json",
   "scripts": {
-    "build": "tsdown src/eslint.ts src/playwright.ts src/vitest.ts --dts --format esm --clean",
+    "build": "tsdown src/eslint.ts src/playwright.ts src/storybook.ts src/vitest.ts --dts --format esm --clean",
     "lint": "eslint --max-warnings=0 .",
     "format": "prettier --ignore-path ../.gitignore --write .",
     "format:check": "prettier --ignore-path ../.gitignore --check .",
