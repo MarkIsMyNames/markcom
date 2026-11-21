@@ -1,14 +1,15 @@
 # markcom
 
-Shared libraries for my Python and TypeScript projects.
+Shared libraries for my Python and TypeScript projects: `markcom` for Python, `@markcom/i18n` and `@markcom/web-config` for npm, and the release tool and CI workflows my other repositories call.
 
-| Folder | Package | For |
-|---|---|---|
-| `markcom/` | `markcom` (Python, installed from git) | typed `config.json`, secrets from the environment and the `.env` beside `config.json`, logging and the `run()` entry point; with the `desktop` extra, notifications; with the `window` extra, a tray icon and a web frontend in its own window (`markcom.tray`, `markcom.window`); with the `web` extra, a loopback Host/Origin guard (`markcom.own_origin`); with the `nicegui` extra, a NiceGUI UI served on its own thread (`markcom.ui_server`, `markcom.page_refresh`) |
-| `markcom-i18n/` | `@markcom/i18n` (npm) | locale lookup, browser-language detection, i18next set-up, the `index.html` locale plugin, `/<lang>/` routing, and build-time checks of every locale file; its `e2e/` tests the routing on a small test site |
-| `markcom-web-config/` | `@markcom/web-config` (npm) | shared ESLint, Prettier, TypeScript, Vitest coverage, Playwright and Storybook settings, and the test that screenshots every Storybook story |
+## Requirements
 
-## Installing
+- Python 3.13 or later, with uv, for `markcom` and `release-tools`
+- Node.js 24 or later, with npm, for `@markcom/i18n` and `@markcom/web-config`
+- On Linux, a D-Bus session with a notification service, for `markcom[desktop]` notifications
+- pre-commit, to run the checks
+
+## Quick start
 
 Python, pinned by release tag, with uv:
 
@@ -20,12 +21,6 @@ dependencies = ["markcom"]
 markcom = { git = "https://github.com/MarkIsMyNames/markcom", subdirectory = "markcom", tag = "markcom-v<version>" }
 ```
 
-The `desktop` extra (`markcom[desktop]`) sends notifications and needs no Qt. The `window` extra (`markcom[window]`) adds the tray icon and `markcom.window`, which shows a web frontend in its own window with QtWebEngine; it downloads Qt and WebEngine, about 260 MB on Linux (pyside6-webengine, pyside6-addons and pyside6-essentials). The window runs in its own process, started on each open and ended on each close, so a closed window holds no QtWebEngine memory. Each open loads the page afresh; the window keeps its size and maximised state in `~/.config/markcom/<title>.conf`. Its log goes to the app's stderr, not to notifications. The window keeps no cookies or site storage, and it does not download files.
-
-A tray built with `TrayNotifications` also sends every logger's ERROR records as notifications, shown for its `error_display_sec`, and CRITICAL ones until dismissed, while it is entered. Each counts on the tray's badge. An app logs a failure and markcom notifies; it needs no notifier code of its own.
-
-The `web` extra (`markcom[web]`, Starlette only) adds `OwnOriginOnly`, ASGI middleware for a server bound to loopback: it refuses any request or websocket whose Host, or Origin if it has one, is not the server's own address, which stops DNS rebinding and cross-origin websockets from pages in the browser. The `nicegui` extra (`markcom[nicegui]`) adds `UiServer`, which serves a NiceGUI UI behind that guard on its own thread so the tray and window keep the main thread, and `keep_current`, which redraws a page's body when a change is announced (`announce`, safe from any thread, such as a scheduler's) and only if what it shows has changed.
-
 TypeScript, from npm:
 
 ```sh
@@ -33,12 +28,57 @@ npm install @markcom/i18n
 npm install --save-dev @markcom/web-config
 ```
 
+## Usage
+
+### markcom
+
+| Function or class | Extra | What it does | Example |
+|---|---|---|---|
+| `run` | none | Loads `config.json` and the secrets, configures logging at the config's `log_level`, then calls `main(config, secrets)`. A configuration error goes to stderr and exits with `os.EX_CONFIG`. | `run(main, Path("config.json"), AppConfig, AppSecrets)` |
+| `BaseAppConfig` | none | Base for an app's `config.json` model, with `log_level`. Every field is required, unknown keys are rejected, and the model is immutable. | `class AppConfig(BaseAppConfig): poll_sec: int` |
+| `BaseSecrets`, `NoSecrets` | none | Base for secrets: each field is read from its upper-case variable, from the environment first, then from the `.env` beside `config.json`. `NoSecrets` is for an app that reads none; it ignores any `.env`. | `class AppSecrets(BaseSecrets): api_token: SecretStr` |
+| `DesktopNotifier` | `desktop` | Sends desktop notifications from the caller's thread. Needs no Qt. | `DesktopNotifier("App", icon)` |
+| `Tray`, `TrayAction`, `TrayNotifications` | `window` | Tray icon. A left click opens or closes its target; a right click shows its actions, then Quit. | `with Tray(app, icon, None, window, [TrayAction("Sync", sync)]): app.exec()` |
+| `WebWindow` | `window` | Shows a web frontend in its own window, with QtWebEngine, as the tray's target. | `WebWindow("App", url, icon)` |
+| `OwnOriginOnly` | `web` | ASGI middleware for a server bound to loopback. | `OwnOriginOnly(app, IPv4Address("127.0.0.1"), 8080)` |
+| `UiServer` | `nicegui` | Serves a NiceGUI UI behind `OwnOriginOnly` on its own thread, so the tray and window keep the main thread. | `with UiServer(root, "App", IPv4Address("127.0.0.1"), 8080): app.exec()` |
+| `keep_current`, `announce` | `nicegui` | `keep_current` draws a page's body and redraws it when a change is announced, only if what it shows has changed. `announce` is safe from any thread, such as a scheduler's. | `refresh = keep_current(read, body, changed)` |
+
+The `window` extra downloads Qt and WebEngine, about 260 MB on Linux (pyside6-webengine, pyside6-addons and pyside6-essentials). The window runs in its own process, started on each open and ended on each close, so a closed window holds no QtWebEngine memory. Each open loads the page afresh; the window keeps its size and maximised state in `~/.config/markcom/<title>.conf`. The window process's warnings and errors go to the app's stderr as bare messages, not to notifications. The window keeps no cookies or site storage, and it does not download files.
+
+A tray built with `TrayNotifications` also sends every logger's ERROR records as notifications, shown for its `error_display_sec`, and CRITICAL ones until dismissed, while it is entered. Each counts on the tray's badge. An app logs a failure and markcom notifies; it needs no notifier code of its own.
+
+`OwnOriginOnly` refuses any request or websocket whose Host, or Origin if it has one, is not the server's own address, which stops DNS rebinding and cross-origin websockets from pages in the browser.
+
+### @markcom/i18n
+
+| Import | What it does |
+|---|---|
+| `@markcom/i18n` | Locale lookup and browser-language detection (`LocaleSet`, `lookupString`) |
+| `@markcom/i18n/i18next` | i18next set-up (`createI18n`) |
+| `@markcom/i18n/vite` | The `index.html` locale plugin, which also checks every locale file at build time (`localeHtmlPlugin`) |
+| `@markcom/i18n/react-router` | `/<lang>/` routing (`languageRoutes`) |
+| `@markcom/i18n/vitest-setup` | A Vitest setup file in which `t()` returns each key unchanged |
+
+Its `e2e/` tests the routing on a small test site.
+
+### @markcom/web-config
+
+| Import | What it does |
+|---|---|
+| `@markcom/web-config/eslint` | ESLint settings (`createEslintConfig`) |
+| `@markcom/web-config/prettier` | Prettier settings |
+| `@markcom/web-config/tsconfig.json` | TypeScript settings to extend |
+| `@markcom/web-config/vitest` | Vitest coverage settings (`coverageGate`) |
+| `@markcom/web-config/playwright` | Playwright settings (`createPlaywrightConfig`) and the test that screenshots every Storybook story (`testStoryScreenshots`) |
+| `@markcom/web-config/storybook` | Storybook settings (`createStorybookConfig`) |
+
 ## Shared repository settings
 
-- **Renovate preset** (`default.json`): every repository's `renovate.json` is only `{"extends": ["github>MarkIsMyNames/markcom"]}`, so a rule changed here applies everywhere.
-- **Security workflow** (`.github/workflows/security.yml`): Gitleaks and Semgrep. A CI workflow calls it with `uses: MarkIsMyNames/markcom/.github/workflows/security.yml@<commit sha> # main`, granting `contents: read` and `pull-requests: read`; Renovate keeps the commit up to date.
-- **UI tests workflow** (`.github/workflows/ui-tests.yml`): for a project with Storybook, the accessibility check and the comparison of every story's screenshot with its committed baseline, on each push and pull request.
-- **Visual baselines workflow** (`.github/workflows/visual-baselines.yml`): started by hand on a pull request branch after an intended visual change. It compares every screenshot with main's baseline, commits only the images that differ, and lists them in the run summary. A push with `GITHUB_TOKEN` starts no workflows, so it starts the workflows the caller lists, each with a `workflow_dispatch` trigger. ClaudeSkills' react-ui template calls both.
+- `default.json`, the Renovate preset: every repository's `renovate.json` is only `{"extends": ["github>MarkIsMyNames/markcom"]}`, so a rule changed here applies everywhere.
+- `.github/workflows/security.yml`: Gitleaks and Semgrep. A CI workflow calls it with `uses: MarkIsMyNames/markcom/.github/workflows/security.yml@<commit sha> # main`, granting `contents: read` and `pull-requests: read`; Renovate keeps the commit up to date.
+- `.github/workflows/ui-tests.yml`: for a project with Storybook, the accessibility check and the comparison of every story's screenshot with its committed baseline, on each push and pull request.
+- `.github/workflows/visual-baselines.yml`: started by hand on a pull request branch after an intended visual change. It compares every screenshot with main's baseline, commits only the images that differ, and lists them in the run summary. A push with `GITHUB_TOKEN` starts no workflows, so it starts the workflows the caller lists, each with a `workflow_dispatch` trigger. ClaudeSkills' react-ui template calls both UI workflows.
 
 ## Releasing
 
@@ -60,19 +100,25 @@ Never edit a version, run `npm publish` or push a release tag by hand: the `vers
 2. Call `.github/workflows/versions-unchanged.yml` on every event but pushes and `.github/workflows/release.yml` on pushes to `main` after the checks, pinned to the commit of a `release-tools-v*` tag, as ClaudeSkills' base template's `ci.yml` does. The release workflow's `tags` output lists what it released, for publish or deploy jobs.
 3. Create the `release:minor` and `release:major` labels (`gh label create`).
 
-## Checks
+## Commands
 
-`pre-commit install` runs the same checks as CI before each commit; `pre-commit run --all-files` runs them on demand.
+| Command | What it does |
+|---|---|
+| `pre-commit install` | Installs the hook that runs every check below before each commit, the same checks as CI |
+| `pre-commit run --all-files` | Runs every check on demand |
 
-| Check | markcom (Python, uv) | markcom-i18n, markcom-web-config (TypeScript, npm) |
+Run each check inside its library's folder.
+
+| Check | markcom, release-tools (Python, uv) | markcom-i18n, markcom-web-config (TypeScript, npm) |
 |---|---|---|
 | Lint | `uv run ruff check .` | `npm run lint` (ESLint) |
 | Format | `uv run ruff format --check .` | `npm run format:check` (Prettier) |
 | Types | `uv run mypy src` | `npm run typecheck` (tsc) |
-| Language scanner | `uv run bandit -q -r src -x '*_test.py'` | ESLint security rules, part of `npm run lint` |
+| Language scanner | `uv run bandit -q -r src -x '*_test.py'`; release-tools: `uv run bandit -q -r src -c pyproject.toml` | ESLint security rules, part of `npm run lint` |
+| Lock file up to date | `uv lock --check` | none |
 | Audit | `uv run pip-audit --skip-editable` | `npm run audit` |
 | Unit tests, 85% coverage gate | `uv run pytest -q` | `npm test` (Vitest; markcom-i18n only) |
-| Integration tests (own CI job): Linux notifications over a private D-Bus session | `dbus-run-session -- uv run pytest tests/integration --no-cov -q` | none |
+| Integration tests (own CI job): Linux notifications over a private D-Bus session | `dbus-run-session -- uv run pytest tests/integration --no-cov -q` (markcom only) | none |
 | End-to-end | none | `npm run test:e2e` (Playwright; markcom-i18n only) |
 
 Gitleaks and Semgrep run across the whole repository.
