@@ -16,7 +16,6 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 
 from markcom.config import CONFIG
-from markcom.logs import configure_logging
 from markcom.web_scheme import WebProtocol
 from markcom.window_messages import SPEC_VARIABLE, WindowSpec
 
@@ -99,7 +98,6 @@ class OwnOriginWindow(QMainWindow):
 
 def main() -> None:
     spec: WindowSpec = WindowSpec.model_validate_json(os.environ.pop(SPEC_VARIABLE))
-    configure_logging(logging.getLevelName(logging.WARNING))
     app: QApplication = QApplication([spec.title])
     window: OwnOriginWindow = OwnOriginWindow(spec, QSettings(ORGANISATION, spec.title))
     # The app never writes to stdin, so it turns readable only at its end: the app closed the
