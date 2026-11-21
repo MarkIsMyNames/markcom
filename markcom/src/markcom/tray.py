@@ -86,7 +86,9 @@ class _RecordNotifications(logging.Handler):
         title: str = record.levelname.capitalize()
         body: str = record.getMessage()
         # None: no exception, or exc_info=True outside an except block
-        error: BaseException | None = None if record.exc_info is None else record.exc_info[1]
+        error: BaseException | None = None
+        if record.exc_info is not None:
+            _, error, _ = record.exc_info
         if error is not None:
             # the traceback is for the log; a notification says only why
             body = f"{body}: {''.join(format_exception_only(error, show_group=True)).strip()}"

@@ -16,7 +16,8 @@ from release_tools.report import error, say
 
 def _base(repo: Repo) -> str:
     # At a pull request's merge commit this is its first parent; at a branch head, its fork point.
-    return repo.merge_base(HEAD, REMOTE_MAIN)[0].hexsha
+    base, *_ = repo.merge_base(HEAD, REMOTE_MAIN)
+    return base.hexsha
 
 
 def _check(repo: Repo, library: Library, labels: Labels, base: str) -> bool:

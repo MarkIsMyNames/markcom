@@ -11,8 +11,9 @@ const KEY_SEPARATOR: string = '.';
 /** Every dotted key path that ends in a string, with its string. */
 export function flattenLocale(locale: LocaleRecord): ReadonlyMap<string, string> {
   return new Map(
-    Object.entries<unknown>(flattenObject(locale, { delimiter: KEY_SEPARATOR })).filter(
-      (entry: [string, unknown]): entry is [string, string] => typeof entry[1] === 'string',
+    Object.entries<unknown>(flattenObject(locale, { delimiter: KEY_SEPARATOR })).flatMap(
+      ([key, value]: [string, unknown]): [string, string][] =>
+        typeof value === 'string' ? [[key, value]] : [],
     ),
   );
 }
@@ -39,9 +40,12 @@ export class LocaleSet<Lang extends string, Locale extends LocaleRecord> {
   private readonly locales: ReadonlyMap<Lang, Locale>;
 
   constructor(locales: Readonly<Record<Lang, Locale>>, defaultLang: NoInfer<Lang>) {
+    const isLang: (key: string) => key is Lang = (key: string): key is Lang =>
+      Object.hasOwn(locales, key);
     this.locales = new Map(
-      Object.entries<Locale>(locales).filter((entry: [string, Locale]): entry is [Lang, Locale] =>
-        Object.hasOwn(locales, entry[0]),
+      Object.entries<Locale>(locales).flatMap(
+        ([lang, locale]: [string, Locale]): [Lang, Locale][] =>
+          isLang(lang) ? [[lang, locale]] : [],
       ),
     );
     this.langs = [...this.locales.keys()];
