@@ -105,8 +105,6 @@ class UiServerConfig(StrictModel):
 
 class MarkcomConfig(StrictModel):
     log_format: LogFormat
-    # Names the app a written .desktop file belongs to, so no other file is ever taken over.
-    desktop_entry_owner_key: str
     tray: TrayConfig
     window: WindowConfig
     ui_server: UiServerConfig

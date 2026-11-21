@@ -1055,10 +1055,7 @@ dependencies = [
 
 [package.optional-dependencies]
 desktop = [
-    { name = "dbus-fast" },
     { name = "desktop-notifier" },
-    { name = "python-slugify" },
-    { name = "xdg-base-dirs" },
 ]
 nicegui = [
     { name = "nicegui" },
@@ -1070,16 +1067,14 @@ web = [
     { name = "starlette" },
 ]
 window = [
-    { name = "dbus-fast" },
     { name = "desktop-notifier" },
     { name = "pyside6-webengine" },
-    { name = "python-slugify" },
-    { name = "xdg-base-dirs" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
+    { name = "dbus-fast" },
     { name = "httpx" },
     { name = "markcom", extra = ["nicegui", "window"] },
     { name = "mypy" },
@@ -1092,7 +1087,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dbus-fast", marker = "extra == 'desktop'", specifier = ">=5.2.0" },
     { name = "desktop-notifier", marker = "extra == 'desktop'", specifier = ">=6.2" },
     { name = "markcom", extras = ["desktop"], marker = "extra == 'window'" },
     { name = "markcom", extras = ["web"], marker = "extra == 'nicegui'" },
@@ -1100,17 +1094,16 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.14" },
     { name = "pydantic-settings", specifier = ">=2.12" },
     { name = "pyside6-webengine", marker = "extra == 'window'", specifier = ">=6.12" },
-    { name = "python-slugify", marker = "extra == 'desktop'", specifier = ">=9.2.0" },
     { name = "starlette", marker = "extra == 'web'", specifier = ">=1.3" },
     { name = "uvicorn", marker = "extra == 'nicegui'", specifier = ">=0.54" },
     { name = "wsproto", marker = "extra == 'nicegui'", specifier = ">=1.3" },
-    { name = "xdg-base-dirs", marker = "extra == 'desktop'", specifier = ">=6.1.0" },
 ]
 provides-extras = ["desktop", "window", "web", "nicegui"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.9" },
+    { name = "dbus-fast", specifier = ">=5.2.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "markcom", extras = ["window", "nicegui"] },
     { name = "mypy", specifier = ">=2.4" },
@@ -2036,18 +2029,6 @@ wheels = [
 ]
 
 [[package]]
-name = "python-slugify"
-version = "9.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "text-unidecode" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/e6/8527e71118340258eb7e81def3f4377924528eda1e1be70fad008a31b70f/python_slugify-9.2.0.tar.gz", hash = "sha256:cee32948083476013804de1667724fb1362dacb71e47b1d5d92adf8db6ee3298", size = 69018, upload-time = "2026-11-16T19:48:49.12Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/ef/ba954e68262a1f658d0e127ecb0282c737ad18b215baf686e6a0e60a9bf8/python_slugify-9.2.0-py3-none-any.whl", hash = "sha256:7298dcfc65e9ccdf834b3c398f163af0d09a9a8fc1ee6a7b2dffd8d38bfb756e", size = 17169, upload-time = "2026-11-16T19:48:48.009Z" },
-]
-
-[[package]]
 name = "python-socketio"
 version = "5.18.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2215,15 +2196,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7a/ec/b628c3b1613fe9340de1c5daba957f5b152159ac350b6ce4ad3d2469f822/stevedore-5.10.0.tar.gz", hash = "sha256:6005f32c09dc3159802a61c04862770e439e32db22f6da78ba56e8a735466882", size = 520466, upload-time = "2026-11-12T11:47:05.38Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/78/918aaff2864a8829d061db40acb9da04c89e5c3a01d65932b34432ebd78b/stevedore-5.10.0-py3-none-any.whl", hash = "sha256:47c48dc09e75933106c1bba0a7690eef3b5acecdb807df6d47cc40b2532fa927", size = 56789, upload-time = "2026-11-12T11:47:04.273Z" },
-]
-
-[[package]]
-name = "text-unidecode"
-version = "1.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ab/e2/e9a00f0ccb71718418230718b3d900e71a5d16e701a3dae079a21e9cd8f8/text-unidecode-1.3.tar.gz", hash = "sha256:bad6603bb14d279193107714b288be206cac565dfa49aa5b105294dd5c4aab93", size = 76885, upload-time = "2019-08-30T21:36:45.405Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/a5/c0b6468d3824fe3fde30dbb5e1f687b291608f9473681bbf7dabbf5a87d7/text_unidecode-1.3-py2.py3-none-any.whl", hash = "sha256:1311f10e8b895935241623731c2ba64f4c455287888b18189350b67134a822e8", size = 78154, upload-time = "2019-08-30T21:37:03.543Z" },
 ]
 
 [[package]]
@@ -2677,15 +2649,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c7/79/12135bdf8b9c9367b8701c2c19a14c913c120b882d50b014ca0d38083c2c/wsproto-1.3.2.tar.gz", hash = "sha256:b86885dcf294e15204919950f666e06ffc6c7c114ca900b060d6e16293528294", size = 50116, upload-time = "2025-11-20T18:18:01.871Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/f5/10b68b7b1544245097b2a1b8238f66f2fc6dcaeb24ba5d917f52bd2eed4f/wsproto-1.3.2-py3-none-any.whl", hash = "sha256:61eea322cdf56e8cc904bd3ad7573359a242ba65688716b0710a5eb12beab584", size = 24405, upload-time = "2025-11-20T18:18:00.454Z" },
-]
-
-[[package]]
-name = "xdg-base-dirs"
-version = "6.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0c/d7/e4723658e5a6e36de07c6b11428a83ad6d7cceaa5f28a77ac6dd46bc1565/xdg_base_dirs-6.1.0.tar.gz", hash = "sha256:552729eabe55170f285954374f29bb03ba6b6dea10910f48785e69cb95215a06", size = 4431, upload-time = "2026-11-02T18:04:20.371Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/7b/57c565c9ffa1f0e6e4ae73f54fa760e92dc46ae343d5ad5a3f646ae8c891/xdg_base_dirs-6.1.0-py3-none-any.whl", hash = "sha256:487d2f388037b310ca50fe322f706c41937db107215dccd060374e94fa16be6a", size = 5398, upload-time = "2026-11-02T18:04:19.207Z" },
 ]
 
 [[package]]

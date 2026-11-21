@@ -18,8 +18,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from markcom.config import CONFIG
-from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
-from markcom.notifier import logger as notifier_logger
+from markcom.notifier import NEVER_EXPIRES_SEC, NOTIFIER_THREAD, DesktopNotifier
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -70,8 +69,9 @@ class _RecordNotifications(logging.Handler):
 
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
-        # the notifier's own failure: sending it would fail and log again, without end
-        return record.name != notifier_logger.name and super().filter(record)
+        # Logged on the notifier's thread while a send waits on it, holding this handler's lock:
+        # sending it would wait on that lock for ever.
+        return record.threadName != NOTIFIER_THREAD and super().filter(record)
 
     @override
     def emit(self, record: logging.LogRecord) -> None:
