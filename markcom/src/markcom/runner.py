@@ -1,7 +1,7 @@
 import logging
+import os
 import sys
 from collections.abc import Callable
-from enum import IntEnum
 from pathlib import Path
 
 from markcom.config import BaseAppConfig, ConfigError, load_config
@@ -9,10 +9,6 @@ from markcom.logs import configure_logging
 from markcom.secrets import BaseSecrets, load_secrets
 
 logger: logging.Logger = logging.getLogger(__name__)
-
-
-class ExitCode(IntEnum):
-    CONFIG_ERROR = 78
 
 
 def run[TConfig: BaseAppConfig, TSecrets: BaseSecrets, TResult](
@@ -28,7 +24,7 @@ def run[TConfig: BaseAppConfig, TSecrets: BaseSecrets, TResult](
     except ConfigError as error:
         # Logging is not configured yet, so the error goes straight to stderr.
         sys.stderr.write(f"Configuration error: {error}\n")
-        raise SystemExit(ExitCode.CONFIG_ERROR) from error
+        raise SystemExit(os.EX_CONFIG) from error
     configure_logging(config.log_level)
     # variable names only, never values
     logger.info(

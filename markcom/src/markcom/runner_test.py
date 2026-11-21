@@ -1,11 +1,12 @@
 import json
 import logging
+import os
 
 import pytest
 from pydantic import SecretStr
 
 from markcom.config import BaseAppConfig
-from markcom.runner import ExitCode, run
+from markcom.runner import run
 from markcom.secrets import BaseSecrets
 
 
@@ -47,7 +48,7 @@ def test_exits_with_config_error_before_main_runs(config_path, monkeypatch, caps
             config_model=ExampleConfig,
             secrets_model=ExampleSecrets,
         )
-    assert exit_info.value.code == ExitCode.CONFIG_ERROR
+    assert exit_info.value.code == os.EX_CONFIG
     assert "api_token" in capsys.readouterr().err
     assert called == []
 
