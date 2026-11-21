@@ -39,9 +39,11 @@ dev = [
     "httpx>=0.28",
     "mypy>=2.4",
     "pip-audit>=2.10",
+    "psutil>=7.2",
     "pytest>=9.0",
     "pytest-asyncio>=1.5",
     "pytest-cov>=7.0",
+    "pytest-qt>=4.5",
     "ruff>=0.17",
 ]
 
@@ -59,6 +61,7 @@ testpaths = ["src"]
 python_files = ["*_test.py"]
 addopts = "--strict-markers --strict-config --cov=markcom --cov-report=term-missing --cov-fail-under=85"
 asyncio_mode = "auto"
+qt_api = "pyside6"
 asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     "error",
