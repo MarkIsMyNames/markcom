@@ -1,4 +1,6 @@
 import json
+import os
+import tomllib
 
 import pytest
 
@@ -15,7 +17,7 @@ def commit_on(clone, change):
 
 def test_unchanged_versions_pass(clone):
     clone.merge_pr(lambda: None)
-    assert main() == 0
+    assert main() == os.EX_OK
 
 
 @pytest.mark.parametrize(
@@ -27,8 +29,8 @@ def test_unchanged_versions_pass(clone):
             "markcom-i18n: version changed from ",
         ),
         (
-            lambda clone: clone.set_npm_version("markcom-web-config", "99.0.0-rc.1"),
-            "markcom-web-config: version 99.0.0-rc.1 is not of the form X.Y.Z",
+            lambda clone: clone.set_npm_version("markcom-web-config", "1.0"),
+            "markcom-web-config: version 1.0 is not of the form X.Y.Z",
         ),
         (
             lambda clone: clone.write("markcom-i18n/package.json", "{ broken"),
@@ -38,8 +40,15 @@ def test_unchanged_versions_pass(clone):
 )
 def test_changed_or_bad_version_fails(clone, capsys, change, message):
     clone.merge_pr(lambda: change(clone))
-    assert main() == 1
+    assert main() == os.EX_DATAERR
     assert message in capsys.readouterr().out
+
+
+def test_build_metadata_added_to_a_version_fails(clone):
+    text = (clone.path / "markcom" / "pyproject.toml").read_text(encoding="utf-8")
+    version = tomllib.loads(text)["project"]["version"]
+    clone.merge_pr(lambda: clone.set_markcom_version(f"{version}+build"))
+    assert main() == os.EX_DATAERR
 
 
 def test_every_library_is_reported(clone, capsys):
@@ -56,7 +65,7 @@ def test_every_library_is_reported(clone, capsys):
 
 def test_missing_release_config_fails(clone, capsys):
     clone.merge_pr(lambda: clone.repo.git.rm("-q", "release.json"))
-    assert main() == 1
+    assert main() == os.EX_CONFIG
     assert "release.json" in capsys.readouterr().out
 
 
@@ -77,7 +86,7 @@ def test_library_new_in_the_pull_request_passes(clone, capsys):
         clone.write("release.json", json.dumps(config))
 
     clone.merge_pr(add_library)
-    assert main() == 0
+    assert main() == os.EX_OK
     assert "newlib: 0.1.0, new" in capsys.readouterr().out
 
 
@@ -85,7 +94,7 @@ def test_a_version_changed_earlier_on_a_branch_fails_at_its_head(clone, capsys):
     clone.repo.git.switch("-c", "pr")
     commit_on(clone, lambda: clone.set_markcom_version("99.0.0"))
     commit_on(clone, lambda: clone.append("README.md", "\nlater commit\n"))
-    assert main() == 1
+    assert main() == os.EX_DATAERR
     assert "markcom: version changed from " in capsys.readouterr().out
 
 
@@ -95,7 +104,7 @@ def test_a_release_on_main_after_the_branch_left_passes_at_its_head(clone):
     clone.repo.git.switch("main")
     clone.push_to_main(lambda: clone.set_markcom_version("99.0.0"))
     clone.repo.git.switch("pr")
-    assert main() == 0
+    assert main() == os.EX_OK
 
 
 def test_a_release_on_main_after_the_merge_commit_was_made_passes(clone):
@@ -104,4 +113,4 @@ def test_a_release_on_main_after_the_merge_commit_was_made_passes(clone):
     clone.repo.git.switch("-c", "later-main", "HEAD^1")
     clone.push_to_main(lambda: clone.set_markcom_version("99.0.0"))
     clone.repo.git.checkout(merged.hexsha)
-    assert main() == 0
+    assert main() == os.EX_OK

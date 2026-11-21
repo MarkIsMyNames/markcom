@@ -130,6 +130,14 @@ class Clone:
         return self.origin.git.show(f"main:{relative}")
 
 
+@pytest.fixture(autouse=True)
+def github_output(tmp_path, monkeypatch):
+    """GitHub Actions always sets it; release appends its step outputs there."""
+    output = tmp_path / "github-output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    return output
+
+
 @pytest.fixture
 def clone(tmp_path, monkeypatch):
     made = Clone(tmp_path)

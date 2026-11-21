@@ -17,16 +17,12 @@ def announce(changed: Event[[]]) -> None:
     if loop is None:
         logger.debug("change announced before NiceGUI started, so nothing to redraw")
         return
-    # Stopped: the app is quitting.
-    if not loop.is_running():
-        logger.debug("change announced after NiceGUI stopped, so ignored")
-        return
     logger.debug("change announced")
-    # Event.emit schedules on the loop it is called from, so it must run on NiceGUI's.
+    # Event.emit schedules on the loop it is called from, so it must run on NiceGUI's. A stopped
+    # loop never runs it; a closed one refuses it. Either way the app is quitting.
     try:
         loop.call_soon_threadsafe(changed.emit)
     except RuntimeError:
-        # closed since the check above: the app is quitting
         logger.debug("change announced as NiceGUI closed, so ignored")
 
 

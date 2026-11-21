@@ -7,63 +7,85 @@ name: `dbus-run-session -- uv run pytest tests/integration --no-cov`.
 import asyncio
 import multiprocessing
 from pathlib import Path
+from typing import Annotated
 
 import pytest
-from dbus_fast import Message, MessageType, NameFlag, RequestNameReply
+from dbus_fast import NameFlag, RequestNameReply
 from dbus_fast.aio import MessageBus
+from dbus_fast.annotations import DBusDict, DBusInt32, DBusSignature, DBusStr, DBusUInt32
+from dbus_fast.service import ServiceInterface, dbus_method
 from desktop_notifier import Urgency
 
 from markcom.notifier import DesktopNotifier
 
 SERVICE = "org.freedesktop.Notifications"
+SERVICE_PATH = "/org/freedesktop/Notifications"
+# Notify replies with the new notification's ID, never 0.
+NOTIFICATION_ID = 1
 TAKEN = "taken"
 READY = "ready"
 
 
-def accept(message):
-    return Message.new_method_return(message, "u", [1])
+class Notifications(ServiceInterface):
+    """Records each Notify call; desktop-notifier introspects it first, so it must be a real
+    interface rather than a bare message handler."""
+
+    def __init__(self, events):
+        super().__init__(SERVICE)
+        self._events = events
+
+    @dbus_method(name="Notify")
+    def notify(
+        self,
+        app_name: DBusStr,
+        _replaces_id: DBusUInt32,
+        _app_icon: DBusStr,
+        summary: DBusStr,
+        body: DBusStr,
+        _actions: Annotated[list[str], DBusSignature("as")],
+        hints: DBusDict,
+        expire_timeout: DBusInt32,
+    ) -> DBusUInt32:
+        plain_hints = {name: variant.value for name, variant in hints.items()}
+        self._events.put((app_name, summary, body, plain_hints, expire_timeout))
+        return NOTIFICATION_ID
+
+    @dbus_method(name="GetCapabilities")
+    def get_capabilities(self) -> Annotated[list[str], DBusSignature("as")]:
+        return ["body"]
+
+    @dbus_method(name="GetServerInformation")
+    def get_server_information(
+        self,
+    ) -> Annotated[tuple[str, str, str, str], DBusSignature("ssss")]:
+        return ("Fake", "markcom", "1", "1.2")
 
 
-def reject(message):
-    return Message.new_error(message, "org.freedesktop.DBus.Error.Failed", "rejected")
-
-
-async def serve(reply, events, stop):
+async def serve(events, stop):
     bus = await MessageBus().connect()
+    bus.export(SERVICE_PATH, Notifications(events))
     owner = await bus.request_name(SERVICE, NameFlag.DO_NOT_QUEUE)
     if owner is not RequestNameReply.PRIMARY_OWNER:
         events.put(TAKEN)
         return
-
-    def handle(message):
-        if message.message_type is not MessageType.METHOD_CALL or message.member != "Notify":
-            return None
-        app_name, _, _, title, body, _, hints, timeout_ms = message.body
-        plain_hints = {name: variant.value for name, variant in hints.items()}
-        events.put((app_name, title, body, plain_hints, timeout_ms))
-        return reply(message)
-
-    bus.add_message_handler(handle)
     events.put(READY)
     await asyncio.to_thread(stop.wait)
     bus.disconnect()
     await bus.wait_for_disconnect()
 
 
-def run_service(reply, events, stop):
-    asyncio.run(serve(reply, events, stop))
+def run_service(events, stop):
+    asyncio.run(serve(events, stop))
 
 
 class FakeNotificationService:
     """Owns org.freedesktop.Notifications in its own process, as a real one does: run as a
     thread of the test process, it never received markcom's blocking call."""
 
-    def __init__(self, reply):
+    def __init__(self):
         self._events = multiprocessing.Queue()
         self._stop = multiprocessing.Event()
-        self._process = multiprocessing.Process(
-            target=run_service, args=(reply, self._events, self._stop)
-        )
+        self._process = multiprocessing.Process(target=run_service, args=(self._events, self._stop))
 
     def __enter__(self):
         self._process.start()
@@ -83,70 +105,23 @@ class FakeNotificationService:
 
 
 @pytest.fixture
-def data_folders(monkeypatch, tmp_path):
-    home = tmp_path / "home"
-    system = tmp_path / "system"
-    monkeypatch.setenv("XDG_DATA_HOME", str(home))
-    monkeypatch.setenv("XDG_DATA_DIRS", str(system))
-    return home, system
-
-
-@pytest.fixture
 def service():
-    with FakeNotificationService(accept) as running:
+    with FakeNotificationService() as running:
         yield running
 
 
-def hint(call, name):
-    _, _, _, hints, _ = call
-    return hints[name]
-
-
-@pytest.mark.usefixtures("data_folders")
 def test_notification_arrives_with_its_fields(service):
     DesktopNotifier("Integration App", Path("app.png")).send("title", "body", Urgency.Normal, 3)
     app_name, title, message, _, timeout_ms = service.next_call()
     assert (app_name, title, message, timeout_ms) == ("Integration App", "title", "body", 3000)
 
 
-@pytest.mark.usefixtures("data_folders")
 def test_urgency_arrives(service):
     DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Critical, 3)
-    assert hint(service.next_call(), "urgency") == 2
+    _, _, _, hints, _ = service.next_call()
+    assert hints["urgency"] == 2
 
 
-def test_app_without_an_entry_names_the_file_markcom_wrote(service, data_folders):
-    home, _ = data_folders
-    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
-    desktop_entry = hint(service.next_call(), "desktop-entry")
-    assert (home / "applications" / f"{desktop_entry}.desktop").is_file()
-
-
-def test_app_with_an_entry_names_its_own_file(service, data_folders):
-    home, system = data_folders
-    (system / "applications").mkdir(parents=True)
-    (system / "applications" / "org.example.App.desktop").write_text("[Desktop Entry]\n")
-    DesktopNotifier("Integration App", Path("app.png"), "org.example.App").send(
-        "t", "m", Urgency.Normal, 3
-    )
-    assert hint(service.next_call(), "desktop-entry") == "org.example.App"
-    assert not home.exists()
-
-
-@pytest.mark.usefixtures("data_folders")
-def test_rejected_notification_is_not_raised():
-    with FakeNotificationService(reject) as service:
-        DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
-    assert service.next_call()
-
-
-@pytest.mark.usefixtures("data_folders")
 async def test_notification_sent_from_inside_an_event_loop_arrives(service):
     DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
     assert service.next_call()
-
-
-@pytest.mark.usefixtures("data_folders")
-def test_missing_session_bus_is_not_raised(monkeypatch):
-    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS")
-    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)

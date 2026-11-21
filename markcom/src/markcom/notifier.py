@@ -1,70 +1,42 @@
-"""Desktop notifications, best effort: a missing or failing backend is logged, never raised."""
+"""Desktop notifications through desktop-notifier, best effort: it logs a failed send itself, at
+WARNING, and never raises it."""
 
+import asyncio
 import logging
-import platform
+import threading
 from pathlib import Path
-from typing import override
 
-from desktop_notifier import DesktopNotifierSync, Icon, Urgency
-
-from markcom import freedesktop
-from markcom.notification_backend import NotificationBackend
+import desktop_notifier
+from desktop_notifier import Icon, Urgency
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# What an unavailable notification service or a failed send raises.
-BACKEND_ERRORS: tuple[type[Exception], ...] = (OSError, RuntimeError, ImportError)
 # The freedesktop notification spec's timeout for "stay until dismissed".
 NEVER_EXPIRES_SEC: int = 0
-# What platform.system() returns on Linux; the standard library has no enum for it.
-LINUX: str = "Linux"
-
-
-class DesktopNotifierBackend(NotificationBackend):
-    """macOS and Windows, through desktop-notifier."""
-
-    def __init__(self, app_name: str, icon: Path) -> None:
-        self._notifier: DesktopNotifierSync = DesktopNotifierSync(
-            app_name=app_name, app_icon=Icon(path=icon)
-        )
-
-    @override
-    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
-        logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
-        self._notifier.send(title=title, message=message, urgency=urgency, timeout=display_sec)
-
-
-def _open_backend(app_name: str, icon: Path, desktop_entry: str | None) -> NotificationBackend:
-    system: str = platform.system()
-    if system == LINUX:
-        logger.debug("%s: notifications over D-Bus", system)
-        return freedesktop.open_backend(app_name, icon, desktop_entry)
-    logger.debug("%s: notifications through desktop-notifier", system)
-    return DesktopNotifierBackend(app_name, icon)
+# The thread every send runs on; tray.py skips its log records, see there.
+NOTIFIER_THREAD: str = "notifier"
 
 
 class DesktopNotifier:
-    """Sends each notification straight away, from the caller's thread."""
+    """Sends from any thread, even one already running an event loop, as uvicorn's does."""
 
-    def __init__(self, app_name: str, icon: Path, desktop_entry: str | None = None) -> None:
-        """`desktop_entry`: the app's installed .desktop file ID (Linux); None writes one."""
-        # None: the notification service was unavailable at start-up.
-        self._backend: NotificationBackend | None
-        try:
-            self._backend = _open_backend(app_name, icon, desktop_entry)
-        except BACKEND_ERRORS:
-            logger.exception("desktop notifications unavailable")
-            self._backend = None
-        else:
-            logger.info("desktop notifications through %s", type(self._backend).__name__)
+    def __init__(self, app_name: str, icon: Path) -> None:
+        # desktop-notifier needs an absolute icon path; a relative one fails every send.
+        self._notifier: desktop_notifier.DesktopNotifier = desktop_notifier.DesktopNotifier(
+            app_name=app_name, app_icon=Icon(path=icon.resolve())
+        )
+        # Its own loop for the app's lifetime: the D-Bus connection stays bound to the loop
+        # that opened it. A daemon thread, so it never holds up exit.
+        self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
+        threading.Thread(target=self._loop.run_forever, name=NOTIFIER_THREAD, daemon=True).start()
+        logger.info("desktop notifications for %r", app_name)
 
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         """Show a notification for `display_sec`; NEVER_EXPIRES_SEC (0) keeps it until the user
-        dismisses it."""
-        if self._backend is None:
-            logger.debug("no notification backend, so %r is dropped", title)
-            return
-        try:
-            self._backend.send(title, message, urgency, display_sec)
-        except BACKEND_ERRORS:
-            logger.exception("desktop notification failed")
+        dismisses it. Returns once the desktop has it, so a log record just before exit still
+        shows."""
+        logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
+        asyncio.run_coroutine_threadsafe(
+            self._notifier.send(title=title, message=message, urgency=urgency, timeout=display_sec),
+            self._loop,
+        ).result()

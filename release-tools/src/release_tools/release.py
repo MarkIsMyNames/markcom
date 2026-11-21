@@ -10,6 +10,7 @@ from pathlib import Path
 from git import GitCommandError, Repo
 from markcom import NoSecrets, run
 from markcom.config import ConfigError
+from semver import Version
 
 from release_tools.config import CONFIG_PATH, ToolConfig
 from release_tools.constants import (
@@ -21,10 +22,12 @@ from release_tools.constants import (
     PUSH_HEAD_TO_MAIN,
     REMOTE,
     REMOTE_MAIN,
+    TAG_SEPARATOR,
+    TAGS_OUTPUT,
 )
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
-from release_tools.versions import BumpLevel, Version, bump_level
+from release_tools.versions import BumpLevel, bump_level
 
 
 class ReleaseError(RuntimeError):
@@ -37,7 +40,7 @@ def _next_version(repo: Repo, library: Library, level: BumpLevel) -> Version | N
     if latest is None:
         return library.version_at(repo, HEAD)
     if library.changed(repo, library.tag(latest), HEAD):
-        return latest.bump(level)
+        return latest.next_version(level)
     return None
 
 
@@ -67,11 +70,7 @@ def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
     if repo.commit(REMOTE_MAIN) != repo.commit(HEAD):
         message = "main has moved past this commit; the run for main's newest commit releases it"
         raise ReleaseError(message)
-    try:
-        level = bump_level(os.environ[LABELS_VARIABLE].splitlines(), config.labels)
-    except KeyError as missing:
-        message = f"{LABELS_VARIABLE} must hold the merged pull request's labels, one per line"
-        raise ReleaseError(message) from missing
+    level = bump_level(os.environ[LABELS_VARIABLE].splitlines(), config.labels)
     releases = []
     for library in load_libraries(Path(repo.working_dir), config.release_config):
         version = _next_version(repo, library, level)
@@ -88,17 +87,17 @@ def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
 
 def _report_tags(tags: list[str]) -> None:
     """Hands the tags to later steps and jobs, as the step output `tags`, space-separated."""
-    # None: not in GitHub Actions, so no step reads it
-    output = os.environ.get(OUTPUT_VARIABLE)
-    if output is not None:
-        with Path(output).open("a", encoding=ENCODING) as file:
-            file.write(f"tags={' '.join(tags)}\n")
+    with Path(os.environ[OUTPUT_VARIABLE]).open("a", encoding=ENCODING) as file:
+        file.write(f"{TAGS_OUTPUT}={TAG_SEPARATOR.join(tags)}\n")
 
 
 def main() -> int:
     try:
         run(_release, CONFIG_PATH, ToolConfig, NoSecrets)
-    except (ReleaseError, ConfigError, VersionError, GitCommandError) as failure:
+    except ConfigError as failure:
         error(f"release failed: {failure}")
-        return 1
-    return 0
+        return os.EX_CONFIG
+    except (ReleaseError, VersionError, GitCommandError) as failure:
+        error(f"release failed: {failure}")
+        return os.EX_SOFTWARE
+    return os.EX_OK

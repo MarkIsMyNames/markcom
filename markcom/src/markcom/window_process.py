@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 
-from PySide6.QtCore import QByteArray, QSettings, QSocketNotifier, QUrl
+from PySide6.QtCore import QByteArray, QSettings, QSocketNotifier, Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QIcon, QPalette
 from PySide6.QtWebEngineCore import (
     QWebEngineNavigationRequest,
@@ -57,8 +57,7 @@ class _OwnOriginPage(QWebEnginePage):
         # scheme and host only: URL may carry a token
         if url.scheme() in BROWSER_SCHEMES:
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
-            if not QDesktopServices.openUrl(url):
-                logger.error("The desktop could not open a %s link to %s", url.scheme(), url.host())
+            QDesktopServices.openUrl(url)
         else:
             logger.warning("Refused a %s link to %s", url.scheme(), url.host())
 
@@ -70,7 +69,8 @@ class _OwnOriginPage(QWebEnginePage):
 
 
 class OwnOriginWindow(QMainWindow):
-    """The page in a window, at the size the last one saved in `settings`."""
+    """The page in a window, at the size the last one saved in `settings`. Hidden until the page
+    first loads, so a tray click never shows an empty window."""
 
     def __init__(self, spec: WindowSpec, settings: QSettings) -> None:
         super().__init__()
@@ -88,6 +88,8 @@ class OwnOriginWindow(QMainWindow):
         geometry: object = settings.value(GEOMETRY_KEY)
         if isinstance(geometry, QByteArray):
             self.restoreGeometry(geometry)
+        # A failed load shows too: Chromium's error page beats a click that seems to do nothing.
+        view.loadFinished.connect(self.show, Qt.ConnectionType.SingleShotConnection)
         logger.info("Loading %s://%s:%d", start.scheme(), start.host(), start.port())
         view.load(start)
 
@@ -101,11 +103,10 @@ def main() -> None:
     app: QApplication = QApplication([spec.title])
     window: OwnOriginWindow = OwnOriginWindow(spec, QSettings(ORGANISATION, spec.title))
     # The app never writes to stdin, so it turns readable only at its end: the app closed the
-    # window or ended.
+    # window or ended. Quit, not close: a window still hidden while loading wouldn't quit on close.
     QSocketNotifier(sys.stdin.fileno(), QSocketNotifier.Type.Read, window).activated.connect(
-        window.close
+        app.quit
     )
     app.aboutToQuit.connect(window.save_size)
-    window.show()
     app.exec()
     logger.info("The window process ends")

@@ -75,11 +75,9 @@ def test_a_websocket_from_another_origin_is_closed_before_it_connects():
         assert refused.value.code == WS_1008_POLICY_VIOLATION
 
 
-@pytest.mark.parametrize("headers", [{}, {"Origin": "http://127.0.0.1"}])
-def test_on_the_default_port_a_host_without_the_port_reaches_a_page(headers):
-    # Browsers leave port 80 out of Host and Origin.
+def test_a_host_without_the_port_is_refused_even_on_port_80():
     with TestClient(guarded(port=80), base_url="http://127.0.0.1") as browser:
-        assert browser.get("/", headers=headers).status_code == HTTPStatus.OK
+        assert browser.get("/").status_code == HTTPStatus.FORBIDDEN
 
 
 def test_port_zero_is_refused_as_it_is_never_the_real_port():

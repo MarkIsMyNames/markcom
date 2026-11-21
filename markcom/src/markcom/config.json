@@ -1,6 +1,5 @@
 {
   "log_format": "%(asctime)s %(levelname)s %(name)s: %(message)s",
-  "desktop_entry_owner_key": "X-Markcom-App",
   "tray": {
     "icon_size": 64,
     "badge_size": 28,

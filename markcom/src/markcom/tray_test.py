@@ -1,18 +1,17 @@
 import logging
 import os
-import platform
 import threading
 from contextlib import ExitStack
 from pathlib import Path
 from typing import override
 
+import desktop_notifier
 import pytest
 from desktop_notifier import Urgency
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
-from markcom import notifier as notifier_module
 from markcom.config import CONFIG
 from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
 from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
@@ -317,22 +316,21 @@ def test_a_failing_notifier_does_not_break_the_apps_logging(make_tray):
     app_log.error("down")
 
 
-class GoneBus:
-    """DesktopNotifierSync stand-in whose notification service is gone: counts each attempt."""
+class LoggingLibrary:
+    """desktop-notifier stand-in that logs an ERROR on its own thread while it sends, as a
+    library's internals may."""
 
-    def __init__(self):
-        self.attempts = 0
+    def __call__(self, **_):
+        return self
 
-    def send(self, **_):
-        self.attempts += 1
-        gone = "bus gone"
-        raise OSError(gone)
+    async def send(self, **_):
+        logging.getLogger("library").error("internal")
 
 
-def test_a_failed_notification_is_not_itself_sent_as_a_notification(make_tray, monkeypatch):
-    monkeypatch.setattr(platform, "system", lambda: "Darwin")
-    bus = GoneBus()
-    monkeypatch.setattr(notifier_module, "DesktopNotifierSync", lambda **_: bus)
+def test_an_error_logged_while_a_notification_is_sent_does_not_hang_the_app(make_tray, monkeypatch):
+    monkeypatch.setattr(desktop_notifier, "DesktopNotifier", LoggingLibrary())
     make_tray(notifier=DesktopNotifier("App", Path("app.png")))
-    app_log.error("down")
-    assert bus.attempts == 1
+    logging_call = threading.Thread(target=app_log.error, args=("down",), daemon=True)
+    logging_call.start()
+    logging_call.join(WAIT_SEC)
+    assert not logging_call.is_alive()
