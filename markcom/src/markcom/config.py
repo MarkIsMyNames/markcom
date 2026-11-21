@@ -65,8 +65,6 @@ CONFIG_PATH: Path = Path(__file__).with_name("config.json")
 type HexColour = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 type Pixels = Annotated[int, Field(gt=0)]
 type PixelGap = Annotated[int, Field(ge=0)]
-type Seconds = Annotated[float, Field(gt=0)]
-type Count = Annotated[int, Field(ge=0)]
 
 
 class TrayConfig(StrictModel):
@@ -89,8 +87,10 @@ class WindowConfig(StrictModel):
 
     width: Pixels
     height: Pixels
-    # Time a closing window process gets to end before it is killed.
-    close_wait_sec: Seconds
+
+
+type Seconds = Annotated[float, Field(gt=0)]
+type Count = Annotated[int, Field(ge=0)]
 
 
 class UiServerConfig(StrictModel):

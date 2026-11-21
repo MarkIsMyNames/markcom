@@ -11,7 +11,6 @@ from pydantic import HttpUrl
 from PySide6.QtCore import QCoreApplication, QProcess, QProcessEnvironment
 from PySide6.QtWidgets import QApplication
 
-from markcom.config import CONFIG
 from markcom.tray import TrayTarget
 from markcom.window_messages import SPEC_VARIABLE, WindowSpec
 
@@ -19,7 +18,6 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 # -P stops the app's working folder shadowing a module; -c, unlike -m, keeps the module's log name.
 WINDOW_PROCESS: tuple[str, ...] = ("-P", "-c", "from markcom.window_process import main; main()")
-MS_PER_SEC: int = 1000
 
 
 class WebWindow(TrayTarget):
@@ -69,11 +67,8 @@ class WebWindow(TrayTarget):
         process: QProcess = self._process
         # The end of its input closes the window, and its process ends.
         process.closeWriteChannel()
-        if not process.waitForFinished(int(CONFIG.window.close_wait_sec * MS_PER_SEC)):
-            logger.warning(
-                "The window process did not end within %s s, so it is killed",
-                CONFIG.window.close_wait_sec,
-            )
+        if not process.waitForFinished():
+            logger.warning("The window process did not end, so it is killed")
             process.kill()
             process.waitForFinished()
 
