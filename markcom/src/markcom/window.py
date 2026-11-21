@@ -2,6 +2,7 @@
 QtWebEngine memory."""
 
 import logging
+import os
 import sys
 from functools import partial
 from pathlib import Path
@@ -85,7 +86,7 @@ class WebWindow(TrayTarget):
         return process
 
     def _on_finished(self, process: QProcess, exit_code: int, status: QProcess.ExitStatus) -> None:
-        if status is QProcess.ExitStatus.NormalExit and exit_code == 0:
+        if status is QProcess.ExitStatus.NormalExit and exit_code == os.EX_OK:
             logger.info("The window process ended")
         else:
             logger.error("The window process failed: %s, exit code %d", status.name, exit_code)
