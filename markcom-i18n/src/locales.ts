@@ -1,4 +1,5 @@
 import { match } from '@formatjs/intl-localematcher';
+import { flattenObject } from 'es-toolkit';
 import type { ParseKeys } from 'i18next';
 
 export type LocaleValue = string | LocaleRecord;
@@ -10,13 +11,8 @@ const KEY_SEPARATOR: string = '.';
 /** Every dotted key path that ends in a string, with its string. */
 export function flattenLocale(locale: LocaleRecord): ReadonlyMap<string, string> {
   return new Map(
-    Object.entries(locale).flatMap(([key, value]: [string, LocaleValue]): [string, string][] =>
-      typeof value === 'string' ?
-        [[key, value]]
-      : [...flattenLocale(value)].map(([path, text]: [string, string]): [string, string] => [
-          `${key}${KEY_SEPARATOR}${path}`,
-          text,
-        ]),
+    Object.entries<unknown>(flattenObject(locale, { delimiter: KEY_SEPARATOR })).filter(
+      (entry: [string, unknown]): entry is [string, string] => typeof entry[1] === 'string',
     ),
   );
 }
