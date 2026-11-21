@@ -20,6 +20,8 @@ from markcom.notifier import DesktopNotifier
 
 SERVICE = "org.freedesktop.Notifications"
 SERVICE_PATH = "/org/freedesktop/Notifications"
+# Notify replies with the new notification's ID, never 0.
+NOTIFICATION_ID = 1
 TAKEN = "taken"
 READY = "ready"
 
@@ -46,7 +48,7 @@ class Notifications(ServiceInterface):
     ) -> DBusUInt32:
         plain_hints = {name: variant.value for name, variant in hints.items()}
         self._events.put((app_name, summary, body, plain_hints, expire_timeout))
-        return 1
+        return NOTIFICATION_ID
 
     @dbus_method(name="GetCapabilities")
     def get_capabilities(self) -> Annotated[list[str], DBusSignature("as")]:

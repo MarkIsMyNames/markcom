@@ -1,4 +1,5 @@
 import json
+import os
 import tomllib
 from pathlib import Path
 
@@ -46,7 +47,7 @@ def labels(monkeypatch):
 def released(clone, monkeypatch):
     """A clone after a first release run: every library tagged at its declared version."""
     monkeypatch.setenv("RELEASE_LABELS", "")
-    assert main() == 0
+    assert main() == os.EX_OK
     for library in ("markcom", "markcom-web-config", "markcom-i18n"):
         assert f"{library}-v{declared(clone, library)}" in clone.origin_tags()
     return clone
@@ -59,7 +60,7 @@ def test_first_run_tags_untagged_libraries_at_their_declared_versions(clone):
     clone.tag_off_main(f"markcom-v{declared(clone, 'markcom')}")
     tags, pushed = clone.origin_tags(), clone.origin_main()
     npm = ("markcom-web-config", "markcom-i18n")
-    assert main() == 0
+    assert main() == os.EX_OK
     assert clone.origin_tags() - tags == {f"{name}-v{declared(clone, name)}" for name in npm}
     assert {clone.tagged_commit(f"{name}-v{declared(clone, name)}") for name in npm} == {pushed}
     assert clone.origin_main() == pushed
@@ -76,7 +77,7 @@ def _outside_the_code(clone):
 def test_releases_nothing_without_a_code_change(released, change):
     released.push_to_main(lambda: change(released))
     tags, pushed = released.origin_tags(), released.origin_main()
-    assert main() == 0
+    assert main() == os.EX_OK
     assert_nothing_released(released, tags, pushed)
 
 
@@ -85,7 +86,7 @@ def test_code_change_gets_the_next_patch_in_a_release_commit(released):
     new = bumped(old, "patch")
     released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
     pushed = released.origin_main()
-    assert main() == 0
+    assert main() == os.EX_OK
     release = released.origin_main()
     assert release.parents == (pushed,)
     assert release.message.strip() == f"chore(release): markcom {new}"
@@ -110,7 +111,7 @@ def test_code_change_gets_the_next_patch_in_a_release_commit(released):
 def test_manifest_or_config_change_gets_the_next_patch(released, library, relative, change):
     new = bumped(declared(released, library), "patch")
     released.push_to_main(lambda: released.edit_json(f"{library}/{relative}", change))
-    assert main() == 0
+    assert main() == os.EX_OK
     assert released.tagged_commit(f"{library}-v{new}") == released.origin_main()
 
 
@@ -125,7 +126,7 @@ def test_several_libraries_share_one_release_commit(released):
 
     released.push_to_main(both)
     pushed = released.origin_main()
-    assert main() == 0
+    assert main() == os.EX_OK
     release = released.origin_main()
     assert release.parents == (pushed,)
     assert released.tagged_commit(f"markcom-v{markcom}") == release
@@ -147,7 +148,7 @@ def test_next_version_comes_from_the_tag_not_the_version_file(released):
         released.append("markcom-web-config/src/eslint.ts", "// x\n")
 
     released.push_to_main(edit_version_and_code)
-    assert main() == 0
+    assert main() == os.EX_OK
     assert f"markcom-web-config-v{new}" in released.origin_tags()
     manifest = json.loads(released.file_at_origin_main("markcom-web-config/package.json"))
     assert manifest["version"] == new
@@ -156,7 +157,7 @@ def test_next_version_comes_from_the_tag_not_the_version_file(released):
 def test_missing_labels_variable_fails(clone, monkeypatch, capsys):
     monkeypatch.delenv("RELEASE_LABELS", raising=False)
     tags, pushed = clone.origin_tags(), clone.origin_main()
-    assert main() == 1
+    assert main() == os.EX_SOFTWARE
     assert "RELEASE_LABELS" in capsys.readouterr().out
     assert_nothing_released(clone, tags, pushed)
 
@@ -167,7 +168,7 @@ def test_run_for_a_commit_main_has_moved_past_fails(released, capsys):
     released.push_to_main(lambda: released.append("README.md", "\nx\n"))
     tags, newer = released.origin_tags(), released.origin_main()
     released.repo.git.checkout(run_commit.hexsha)
-    assert main() == 1
+    assert main() == os.EX_SOFTWARE
     assert "main has moved past this commit" in capsys.readouterr().out
     assert_nothing_released(released, tags, newer)
 
@@ -176,11 +177,11 @@ def test_older_run_after_a_newer_release_fails_without_releasing(released, capsy
     released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
     older = released.repo.head.commit
     released.push_to_main(lambda: released.append("markcom/src/markcom/logs.py", "\n# x\n"))
-    assert main() == 0
+    assert main() == os.EX_OK
     tags, newer = released.origin_tags(), released.origin_main()
     released.repo.git.checkout(older.hexsha)
     capsys.readouterr()
-    assert main() == 1
+    assert main() == os.EX_SOFTWARE
     assert "main has moved past this commit" in capsys.readouterr().out
     assert_nothing_released(released, tags, newer)
 
@@ -200,7 +201,7 @@ def test_merged_pull_request_label_sets_the_bump(released, monkeypatch, labels, 
     released.push_to_main(change_two)
     monkeypatch.setenv("RELEASE_LABELS", labels)
     tags = released.origin_tags()
-    assert main() == 0
+    assert main() == os.EX_OK
     assert released.origin_tags() - tags == {f"markcom-v{markcom}", f"markcom-i18n-v{i18n}"}
 
 
@@ -218,20 +219,20 @@ def test_rejected_push_releases_nothing(released, capsys, hook):
     script = released.path.parent / "origin.git" / "hooks" / "pre-receive"
     script.write_text(f"#!/bin/sh\n{hook}\n", encoding="utf-8")
     script.chmod(0o755)
-    assert main() == 1
+    assert main() == os.EX_SOFTWARE
     assert "release failed" in capsys.readouterr().out
     assert_nothing_released(released, tags, pushed)
 
 
 def test_root_level_project_releases_under_its_own_tag_prefix(root_project):
     repo, origin = root_project
-    assert main() == 0
+    assert main() == os.EX_OK
     assert {tag.name for tag in origin.tags} == {"v0.1.0"}
     with (Path(repo.working_dir) / "src" / "sample" / "__init__.py").open("a") as file:
         file.write("y = 2\n")
     repo.git.commit("-a", "-m", "code")
     repo.git.push("origin", "HEAD:main")
-    assert main() == 0
+    assert main() == os.EX_OK
     assert {tag.name for tag in origin.tags} == {"v0.1.0", "v0.1.1"}
     assert 'version = "0.1.1"' in origin.git.show("main:pyproject.toml")
     assert 'version = "0.1.1"' in origin.git.show("main:uv.lock")
@@ -242,7 +243,7 @@ def test_released_tags_go_to_github_output(released, monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     new = bumped(declared(released, "markcom"), "patch")
     released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
-    assert main() == 0
+    assert main() == os.EX_OK
     assert output.read_text(encoding="utf-8") == f"tags=markcom-v{new}\n"
 
 
@@ -257,6 +258,6 @@ def test_missing_or_invalid_release_config_fails(clone, capsys, config):
 
     clone.push_to_main(replace_config)
     tags = clone.origin_tags()
-    assert main() == 1
+    assert main() == os.EX_SOFTWARE
     assert "release.json" in capsys.readouterr().out
     assert clone.origin_tags() == tags

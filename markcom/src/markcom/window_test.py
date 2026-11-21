@@ -248,7 +248,7 @@ class QuitOnRequest(SimpleHTTPRequestHandler):
 
 
 def run_an_app_that_quits_with_its_window_open(folder, icon):
-    """Child process: exits 0 only if its window process ended before the app did."""
+    """Child process: exits EX_OK only if its window process ended before the app did."""
     app = QApplication(["Quitting"])
     app.setQuitOnLastWindowClosed(False)
     server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuitOnRequest, directory=str(folder)))
@@ -257,7 +257,7 @@ def run_an_app_that_quits_with_its_window_open(folder, icon):
     WebWindow("Quitting", HttpUrl(url), icon).open()
     app.exec()
     server.shutdown()
-    raise SystemExit(len(window_processes()))
+    raise SystemExit(os.EX_OK if window_processes() == [] else os.EX_SOFTWARE)
 
 
 def test_quitting_the_app_ends_an_open_windows_process_first(tmp_path, icon):
@@ -268,7 +268,7 @@ def test_quitting_the_app_ends_an_open_windows_process_first(tmp_path, icon):
     child.start()
     try:
         child.join(60)
-        assert child.exitcode == 0
+        assert child.exitcode == os.EX_OK
     finally:
         if child.is_alive():
             child.kill()
@@ -287,7 +287,7 @@ def test_a_window_built_before_the_app_fails(icon):
     )
     child.start()
     child.join(60)
-    assert child.exitcode == 0
+    assert child.exitcode == os.EX_OK
 
 
 def run_a_window_without_a_tray(url, icon):
@@ -307,7 +307,7 @@ def test_without_a_tray_closing_the_window_quits_the_app(page, icon):
     child.start()
     try:
         child.join(60)
-        assert child.exitcode == 0
+        assert child.exitcode == os.EX_OK
     finally:
         if child.is_alive():
             child.kill()

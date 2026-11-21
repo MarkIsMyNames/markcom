@@ -1,6 +1,7 @@
 """Fails when a branch has changed a library's version since it left main: CI sets every version
 when it releases."""
 
+import os
 from pathlib import Path
 
 from git import Repo
@@ -53,5 +54,5 @@ def main() -> int:
         unchanged = run(_check_all, CONFIG_PATH, ToolConfig, NoSecrets)
     except ConfigError as failure:
         error(str(failure))
-        return 1
-    return 0 if unchanged else 1
+        return os.EX_CONFIG
+    return os.EX_OK if unchanged else os.EX_DATAERR

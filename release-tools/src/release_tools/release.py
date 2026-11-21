@@ -100,5 +100,5 @@ def main() -> int:
         run(_release, CONFIG_PATH, ToolConfig, NoSecrets)
     except (ReleaseError, ConfigError, VersionError, GitCommandError) as failure:
         error(f"release failed: {failure}")
-        return 1
-    return 0
+        return os.EX_SOFTWARE
+    return os.EX_OK
