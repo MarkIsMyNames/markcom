@@ -6,6 +6,7 @@ from typing import ClassVar, cast, override
 
 import tomlkit
 from git import GitCommandError, Repo
+from semver import Version
 from tomlkit.items import AoT, Table
 
 from release_tools.config import LibraryConfig, LibraryKind, load_release_config
@@ -20,7 +21,6 @@ from release_tools.constants import (
     UV_LOCK,
     VERSION_KEY,
 )
-from release_tools.versions import InvalidVersionError, Version
 
 
 class VersionError(ValueError):
@@ -65,7 +65,7 @@ class Library(ABC):
             raise VersionError(message) from error
         try:
             return Version.parse(text)
-        except InvalidVersionError as error:
+        except ValueError as error:
             message = f"{self.name}: version {text} is not of the form X.Y.Z"
             raise VersionError(message) from error
 

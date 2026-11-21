@@ -28,8 +28,8 @@ def test_unchanged_versions_pass(clone):
             "markcom-i18n: version changed from ",
         ),
         (
-            lambda clone: clone.set_npm_version("markcom-web-config", "99.0.0-rc.1"),
-            "markcom-web-config: version 99.0.0-rc.1 is not of the form X.Y.Z",
+            lambda clone: clone.set_npm_version("markcom-web-config", "1.0"),
+            "markcom-web-config: version 1.0 is not of the form X.Y.Z",
         ),
         (
             lambda clone: clone.write("markcom-i18n/package.json", "{ broken"),

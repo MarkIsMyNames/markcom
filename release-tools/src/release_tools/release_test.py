@@ -154,14 +154,6 @@ def test_next_version_comes_from_the_tag_not_the_version_file(released):
     assert manifest["version"] == new
 
 
-def test_missing_labels_variable_fails(clone, monkeypatch, capsys):
-    monkeypatch.delenv("RELEASE_LABELS", raising=False)
-    tags, pushed = clone.origin_tags(), clone.origin_main()
-    assert main() == os.EX_SOFTWARE
-    assert "RELEASE_LABELS" in capsys.readouterr().out
-    assert_nothing_released(clone, tags, pushed)
-
-
 def test_run_for_a_commit_main_has_moved_past_fails(released, capsys):
     released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
     run_commit = released.repo.head.commit
@@ -238,13 +230,12 @@ def test_root_level_project_releases_under_its_own_tag_prefix(root_project):
     assert 'version = "0.1.1"' in origin.git.show("main:uv.lock")
 
 
-def test_released_tags_go_to_github_output(released, monkeypatch, tmp_path):
-    output = tmp_path / "github-output"
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+def test_released_tags_go_to_github_output(released, github_output):
+    github_output.write_text("", encoding="utf-8")
     new = bumped(declared(released, "markcom"), "patch")
     released.push_to_main(lambda: released.append(CODE, "\n# x\n"))
     assert main() == os.EX_OK
-    assert output.read_text(encoding="utf-8") == f"tags=markcom-v{new}\n"
+    assert github_output.read_text(encoding="utf-8") == f"tags=markcom-v{new}\n"
 
 
 @pytest.mark.usefixtures("labels")

@@ -1,7 +1,5 @@
 """Names the release-tools scripts share: git refs, file details and environment variables."""
 
-import re
-
 ENCODING = "utf-8"
 
 REMOTE = "origin"
@@ -11,7 +9,6 @@ HEAD = "HEAD"
 PUSH_HEAD_TO_MAIN = f"{HEAD}:{MAIN}"
 
 VERSION_KEY = "version"
-VERSION_PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 CODE_FOLDER = "src"
 PYPROJECT = "pyproject.toml"

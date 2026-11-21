@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 dependencies = [
     "gitpython>=3.2.1",
     "markcom",
+    "semver>=3.0",
     "tomlkit>=0.15.2",
 ]
 
