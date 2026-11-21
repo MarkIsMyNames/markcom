@@ -1,113 +1,109 @@
-"""Web frontend in its own QtWebEngine window. Import before any QApplication exists:
-QtWebEngine must load first."""
+"""A web window in its own process (markcom.window_process), so a closed window holds no
+QtWebEngine memory."""
 
 import logging
+import os
+import sys
+from functools import partial
 from pathlib import Path
 from typing import override
 
 from pydantic import HttpUrl
-from PySide6.QtCore import QUrl
-from PySide6.QtGui import QDesktopServices, QIcon
-from PySide6.QtWebEngineCore import (
-    QWebEngineNavigationRequest,
-    QWebEngineNewWindowRequest,
-    QWebEnginePage,
-)
-from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QMainWindow, QWidget
+from PySide6.QtCore import QCoreApplication, QProcess, QProcessEnvironment
+from PySide6.QtWidgets import QApplication
 
-from markcom.config import CONFIG
 from markcom.tray import TrayTarget
-from markcom.web_scheme import WebProtocol
+from markcom.window_messages import SPEC_VARIABLE, WindowSpec
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Links that leave the window for the default browser; any other scheme is refused.
-BROWSER_SCHEMES: frozenset[WebProtocol] = frozenset({WebProtocol.HTTP, WebProtocol.HTTPS})
-
-
-class _OwnOriginPage(QWebEnginePage):
-    """No address bar or Back button, so other sites open in the default browser."""
-
-    def __init__(self, origin: QUrl, parent: QWidget) -> None:
-        super().__init__(parent)
-        self._origin: QUrl = origin
-        self.navigationRequested.connect(self._on_navigation)
-        self.newWindowRequested.connect(self._on_new_window)
-
-    def _on_navigation(self, request: QWebEngineNavigationRequest) -> None:
-        url: QUrl = request.url()
-        logger.debug(
-            "Navigation to %s://%s, main frame %s", url.scheme(), url.host(), request.isMainFrame()
-        )
-        if request.isMainFrame() and not self._is_own_origin(url):
-            request.reject()
-            self._send_away(url)
-
-    def _is_own_origin(self, url: QUrl) -> bool:
-        return (
-            url.scheme() == self._origin.scheme()
-            and url.host() == self._origin.host()
-            and url.port() == self._origin.port()
-        )
-
-    @staticmethod
-    def _send_away(url: QUrl) -> None:
-        # scheme and host only: URL may carry a token
-        if url.scheme() in BROWSER_SCHEMES:
-            logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
-            if not QDesktopServices.openUrl(url):
-                logger.error("The desktop could not open a %s link to %s", url.scheme(), url.host())
-        else:
-            logger.warning("Refused a %s link to %s", url.scheme(), url.host())
-
-    def _on_new_window(self, request: QWebEngineNewWindowRequest) -> None:
-        url: QUrl = request.requestedUrl()
-        logger.debug("New-window request to %s://%s", url.scheme(), url.host())
-        # load() goes through _on_navigation, which filters other sites
-        self.load(url)
+# -P stops the app's working folder shadowing a module; -c, unlike -m, keeps the module's log name.
+WINDOW_PROCESS: tuple[str, ...] = ("-P", "-c", "from markcom.window_process import main; main()")
 
 
 class WebWindow(TrayTarget):
-    """Web page in its own window. Build it after the QApplication; GUI thread only, as Qt
-    requires. Closing only hides it, so the page keeps its state, size, and position."""
+    """GUI thread only, as Qt requires."""
 
     def __init__(self, title: str, url: HttpUrl, icon: Path) -> None:
-        # view in a holder: closing the view ends its page, closing the holder only hides it
-        self._holder: QMainWindow = QMainWindow()
-        self._view: QWebEngineView = QWebEngineView()
-        self._holder.setCentralWidget(self._view)
-        self._start: QUrl = QUrl(str(url))
-        self._view.setPage(_OwnOriginPage(self._start, self._holder))
-        self._holder.setWindowTitle(title)
-        self._holder.setWindowIcon(QIcon(str(icon)))
-        self._holder.resize(CONFIG.window.width, CONFIG.window.height)
+        self._spec: WindowSpec = WindowSpec(
+            title=title,
+            url=url,
+            icon=icon,
+        )
+        # None: no window open
+        self._process: QProcess | None = None
+        app: QCoreApplication | None = QApplication.instance()
+        if app is None:
+            no_app: str = "build the WebWindow after the QApplication"
+            raise RuntimeError(no_app)
+        # Otherwise Qt kills a running window process at exit.
+        app.aboutToQuit.connect(self.close)
 
     @override
     def is_open(self) -> bool:
-        return self._holder.isVisible() and not self._holder.isMinimized()
+        return self._process is not None
 
     @override
     def open(self) -> None:
-        # page loads on first open, so the app's server may start after this window
-        if self._view.url().isEmpty():
-            logger.info(
-                "Loading %s://%s:%d",
-                self._start.scheme(),
-                self._start.host(),
-                self._start.port(),
-            )
-            self._view.load(self._start)
-        # show() won't un-minimise; showNormal() alone would drop maximised, which Qt keeps
-        # while minimised
-        if self._holder.isMaximized():
-            logger.debug("Showing the window maximised")
-            self._holder.showMaximized()
-        else:
-            logger.debug("Showing the window")
-            self._holder.showNormal()
+        if self._process is not None:
+            logger.debug("The window is already open")
+            return
+        # Set before start(), which signals a failure to start from within.
+        self._process = self._new_process()
+        # Scheme, host and port only: the URL may carry a token.
+        logger.info(
+            "Starting the window for %s://%s:%s",
+            self._spec.url.scheme,
+            self._spec.url.host,
+            self._spec.url.port,
+        )
+        self._process.start()
 
     @override
     def close(self) -> None:
-        logger.debug("Hiding the window")
-        self._holder.close()
+        if self._process is None:
+            logger.debug("No window to close")
+            return
+        logger.debug("Closing the window")
+        process: QProcess = self._process
+        # The end of its input closes the window, and its process ends.
+        process.closeWriteChannel()
+        if not process.waitForFinished():
+            logger.warning("The window process did not end, so it is killed")
+            process.kill()
+            process.waitForFinished()
+
+    def _new_process(self) -> QProcess:
+        environment: QProcessEnvironment = QProcessEnvironment.systemEnvironment()
+        environment.insert(SPEC_VARIABLE, self._spec.model_dump_json())
+        process: QProcess = QProcess()
+        process.setProgram(sys.executable)
+        process.setArguments(list(WINDOW_PROCESS))
+        process.setProcessEnvironment(environment)
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.ForwardedChannels)
+        process.finished.connect(partial(self._on_finished, process))
+        process.errorOccurred.connect(partial(self._on_error, process))
+        return process
+
+    def _on_finished(self, process: QProcess, exit_code: int, status: QProcess.ExitStatus) -> None:
+        if status is QProcess.ExitStatus.NormalExit and exit_code == os.EX_OK:
+            logger.info("The window process ended")
+        else:
+            logger.error("The window process failed: %s, exit code %d", status.name, exit_code)
+        self._ended(process)
+
+    def _on_error(self, process: QProcess, error: QProcess.ProcessError) -> None:
+        # Other errors also end in finished, which logs them.
+        if error is QProcess.ProcessError.FailedToStart:
+            logger.error("The window process failed to start: %s", process.errorString())
+            self._ended(process)
+
+    def _ended(self, process: QProcess) -> None:
+        self._process = None
+        process.deleteLater()
+        # As for Qt's own windows: without a tray, closing the last window quits the app.
+        if QApplication.quitOnLastWindowClosed() and not any(
+            window.isVisible() for window in QApplication.topLevelWindows()
+        ):
+            logger.info("The last window closed, so the app quits")
+            QApplication.quit()

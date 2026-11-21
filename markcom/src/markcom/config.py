@@ -83,7 +83,7 @@ class TrayConfig(StrictModel):
 
 
 class WindowConfig(StrictModel):
-    """Web window's opening size; after that Qt keeps the user's."""
+    """Web window's size until it has saved its own."""
 
     width: Pixels
     height: Pixels
