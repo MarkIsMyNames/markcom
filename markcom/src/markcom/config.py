@@ -8,9 +8,6 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationErr
 class ConfigError(Exception):
     """Config or environment is missing or invalid; the message names the key and its source."""
 
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
-
 
 class StrictModel(BaseModel):
     """Base for config and secrets: every field required, unknown keys rejected, immutable."""

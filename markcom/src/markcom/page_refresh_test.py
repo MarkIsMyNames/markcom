@@ -98,10 +98,7 @@ def test_an_announcement_after_nicegui_stops_reaches_no_one(monkeypatch):
 
 
 class ClosingLoop:
-    """NiceGUI's loop closing between announce's check and its call, as it can while quitting."""
-
-    def is_running(self):
-        return True
+    """NiceGUI's loop closed while the app quits."""
 
     def call_soon_threadsafe(self, *_):
         closed = "Event loop is closed"
