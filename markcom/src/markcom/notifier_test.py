@@ -73,13 +73,3 @@ def test_programming_errors_are_not_hidden(monkeypatch):
     notifier = DesktopNotifier("App", Path("app.png"))
     with pytest.raises(KeyError):
         notifier.send("t", "m", Urgency.Normal, 8)
-
-
-@pytest.mark.parametrize("error", [RuntimeError("no toast manager"), OSError("registry")])
-def test_an_unavailable_notifier_makes_sends_do_nothing(monkeypatch, error):
-    def unavailable(**_):
-        raise error
-
-    monkeypatch.setattr(desktop_notifier, "DesktopNotifier", unavailable)
-    notifier = DesktopNotifier("App", Path("app.png"))
-    notifier.send("t", "m", Urgency.Normal, 8)

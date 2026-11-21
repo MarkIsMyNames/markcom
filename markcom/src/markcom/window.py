@@ -68,10 +68,7 @@ class WebWindow(TrayTarget):
         process: QProcess = self._process
         # The end of its input closes the window, and its process ends.
         process.closeWriteChannel()
-        if not process.waitForFinished():
-            logger.warning("The window process did not end, so it is killed")
-            process.kill()
-            process.waitForFinished()
+        process.waitForFinished()
 
     def _new_process(self) -> QProcess:
         environment: QProcessEnvironment = QProcessEnvironment.systemEnvironment()
@@ -82,7 +79,6 @@ class WebWindow(TrayTarget):
         process.setProcessEnvironment(environment)
         process.setProcessChannelMode(QProcess.ProcessChannelMode.ForwardedChannels)
         process.finished.connect(partial(self._on_finished, process))
-        process.errorOccurred.connect(partial(self._on_error, process))
         return process
 
     def _on_finished(self, process: QProcess, exit_code: int, status: QProcess.ExitStatus) -> None:
@@ -91,12 +87,6 @@ class WebWindow(TrayTarget):
         else:
             logger.error("The window process failed: %s, exit code %d", status.name, exit_code)
         self._ended(process)
-
-    def _on_error(self, process: QProcess, error: QProcess.ProcessError) -> None:
-        # Other errors also end in finished, which logs them.
-        if error is QProcess.ProcessError.FailedToStart:
-            logger.error("The window process failed to start: %s", process.errorString())
-            self._ended(process)
 
     def _ended(self, process: QProcess) -> None:
         self._process = None

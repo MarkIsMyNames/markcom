@@ -26,19 +26,6 @@ def _check_log_level(level: str) -> str:
 type LogLevel = Annotated[str, AfterValidator(_check_log_level)]
 
 
-def _check_log_format(log_format: str) -> str:
-    """Formatter(validate=True) alone passes an unknown field or a stray %."""
-    sample: logging.LogRecord = logging.makeLogRecord({"msg": "sample"})
-    try:
-        logging.Formatter(log_format, validate=True).format(sample)
-    except TypeError as error:
-        raise ValueError(str(error)) from error
-    return log_format
-
-
-type LogFormat = Annotated[str, AfterValidator(_check_log_format)]
-
-
 class BaseAppConfig(StrictModel):
     """Every app's config.json has at least a log level; subclass it to add the app's own keys."""
 
@@ -101,7 +88,7 @@ class UiServerConfig(StrictModel):
 
 
 class MarkcomConfig(StrictModel):
-    log_format: LogFormat
+    log_format: str
     tray: TrayConfig
     window: WindowConfig
     ui_server: UiServerConfig

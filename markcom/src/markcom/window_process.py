@@ -57,8 +57,7 @@ class _OwnOriginPage(QWebEnginePage):
         # scheme and host only: URL may carry a token
         if url.scheme() in BROWSER_SCHEMES:
             logger.info("Opening %s link to %s in the browser", url.scheme(), url.host())
-            if not QDesktopServices.openUrl(url):
-                logger.error("The desktop could not open a %s link to %s", url.scheme(), url.host())
+            QDesktopServices.openUrl(url)
         else:
             logger.warning("Refused a %s link to %s", url.scheme(), url.host())
 
