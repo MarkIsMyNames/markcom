@@ -249,6 +249,6 @@ def test_missing_or_invalid_release_config_fails(clone, capsys, config):
 
     clone.push_to_main(replace_config)
     tags = clone.origin_tags()
-    assert main() == os.EX_SOFTWARE
+    assert main() == os.EX_CONFIG
     assert "release.json" in capsys.readouterr().out
     assert clone.origin_tags() == tags

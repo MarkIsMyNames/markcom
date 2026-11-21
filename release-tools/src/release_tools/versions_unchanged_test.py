@@ -1,5 +1,6 @@
 import json
 import os
+import tomllib
 
 import pytest
 
@@ -41,6 +42,13 @@ def test_changed_or_bad_version_fails(clone, capsys, change, message):
     clone.merge_pr(lambda: change(clone))
     assert main() == os.EX_DATAERR
     assert message in capsys.readouterr().out
+
+
+def test_build_metadata_added_to_a_version_fails(clone):
+    text = (clone.path / "markcom" / "pyproject.toml").read_text(encoding="utf-8")
+    version = tomllib.loads(text)["project"]["version"]
+    clone.merge_pr(lambda: clone.set_markcom_version(f"{version}+build"))
+    assert main() == os.EX_DATAERR
 
 
 def test_every_library_is_reported(clone, capsys):

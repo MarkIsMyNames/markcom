@@ -16,8 +16,7 @@ from release_tools.report import error, say
 
 def _base(repo: Repo) -> str:
     # At a pull request's merge commit this is its first parent; at a branch head, its fork point.
-    base, *_ = repo.merge_base(HEAD, REMOTE_MAIN)
-    return base.hexsha
+    return str(repo.git.merge_base(HEAD, REMOTE_MAIN))
 
 
 def _check(repo: Repo, library: Library, labels: Labels, base: str) -> bool:
@@ -30,7 +29,8 @@ def _check(repo: Repo, library: Library, labels: Labels, base: str) -> bool:
     except VersionError as failure:
         error(str(failure))
         return False
-    if after != before:
+    # As text: semver's != ignores build metadata, so 1.0.0+x would pass as 1.0.0.
+    if str(after) != str(before):
         error(
             f"{library.name}: version changed from {before} to {after}; CI sets versions, so "
             f"leave the version files alone and label the pull request {labels.minor} or "

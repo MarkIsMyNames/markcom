@@ -22,6 +22,8 @@ from release_tools.constants import (
     PUSH_HEAD_TO_MAIN,
     REMOTE,
     REMOTE_MAIN,
+    TAG_SEPARATOR,
+    TAGS_OUTPUT,
 )
 from release_tools.libraries import Library, VersionError, load_libraries
 from release_tools.report import error, say
@@ -86,13 +88,16 @@ def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
 def _report_tags(tags: list[str]) -> None:
     """Hands the tags to later steps and jobs, as the step output `tags`, space-separated."""
     with Path(os.environ[OUTPUT_VARIABLE]).open("a", encoding=ENCODING) as file:
-        file.write(f"tags={' '.join(tags)}\n")
+        file.write(f"{TAGS_OUTPUT}={TAG_SEPARATOR.join(tags)}\n")
 
 
 def main() -> int:
     try:
         run(_release, CONFIG_PATH, ToolConfig, NoSecrets)
-    except (ReleaseError, ConfigError, VersionError, GitCommandError) as failure:
+    except ConfigError as failure:
+        error(f"release failed: {failure}")
+        return os.EX_CONFIG
+    except (ReleaseError, VersionError, GitCommandError) as failure:
         error(f"release failed: {failure}")
         return os.EX_SOFTWARE
     return os.EX_OK

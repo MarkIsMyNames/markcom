@@ -13,12 +13,16 @@ from release_tools.config import LibraryConfig, LibraryKind, load_release_config
 from release_tools.constants import (
     CODE_FOLDER,
     ENCODING,
+    NAME_KEY,
     NPM_INDENT,
+    NPM_LOCK_PACKAGES,
+    NPM_ROOT_PACKAGE,
     PACKAGE_JSON,
     PACKAGE_LOCK,
     PROJECT_TABLE,
     PYPROJECT,
     UV_LOCK,
+    UV_LOCK_PACKAGES,
     VERSION_KEY,
 )
 
@@ -106,8 +110,8 @@ class PythonLibrary(Library):
         pyproject_path.write_text(tomlkit.dumps(pyproject), encoding=ENCODING)
         lock_path = root / self._folder / UV_LOCK
         lock = tomlkit.parse(lock_path.read_text(encoding=ENCODING))
-        for package in cast("AoT", lock["package"]):
-            if package["name"] == project["name"]:
+        for package in cast("AoT", lock[UV_LOCK_PACKAGES]):
+            if package[NAME_KEY] == project[NAME_KEY]:
                 package[VERSION_KEY] = str(version)
         lock_path.write_text(tomlkit.dumps(lock), encoding=ENCODING)
 
@@ -126,8 +130,8 @@ class NpmLibrary(Library):
             data = json.loads(path.read_text(encoding=ENCODING))
             data[VERSION_KEY] = str(version)
             # package-lock.json repeats the version in its root package entry
-            if "packages" in data:
-                data["packages"][""][VERSION_KEY] = str(version)
+            if NPM_LOCK_PACKAGES in data:
+                data[NPM_LOCK_PACKAGES][NPM_ROOT_PACKAGE][VERSION_KEY] = str(version)
             text = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
             path.write_text(f"{text}\n", encoding=ENCODING)
 
