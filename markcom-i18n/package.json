@@ -1,6 +1,6 @@
 {
   "name": "@markcom/i18n",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Locale checks, language detection and routing, and i18next set-up for the react-ui websites.",
   "license": "MIT",
   "repository": {
