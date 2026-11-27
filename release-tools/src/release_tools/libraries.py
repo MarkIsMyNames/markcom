@@ -6,47 +6,55 @@ from typing import ClassVar, cast, override
 
 import tomlkit
 from git import GitCommandError, Repo
+from markcom.config import load_config
 from semver import Version
 from tomlkit.items import AoT, Table
+from tomlkit.toml_document import TOMLDocument
 
-from release_tools.config import LibraryConfig, LibraryKind, load_release_config
-from release_tools.constants import (
-    CODE_FOLDER,
-    ENCODING,
-    NAME_KEY,
-    NPM_INDENT,
-    NPM_LOCK_PACKAGES,
-    NPM_ROOT_PACKAGE,
-    PACKAGE_JSON,
-    PACKAGE_LOCK,
-    PROJECT_TABLE,
-    PYPROJECT,
-    UV_LOCK,
-    UV_LOCK_PACKAGES,
-    VERSION_KEY,
-)
+from release_tools.config import LibraryConfig, LibraryKind, ReleaseConfig
+
+ENCODING: str = "utf-8"
+HEAD: str = "HEAD"
+REMOTE: str = "origin"
+MAIN: str = "main"
+REMOTE_MAIN: str = f"{REMOTE}/{MAIN}"
+
+CODE_FOLDER: str = "src"
+PYPROJECT: str = "pyproject.toml"
+UV_LOCK: str = "uv.lock"
+PACKAGE_JSON: str = "package.json"
+PACKAGE_LOCK: str = "package-lock.json"
+VERSION_KEY: str = "version"
+NAME_KEY: str = "name"
+PROJECT_TABLE: str = "project"
+UV_LOCK_PACKAGES: str = "package"
+NPM_LOCK_PACKAGES: str = "packages"
+NPM_ROOT_PACKAGE: str = ""
+# npm's own formatting
+NPM_INDENT: int = 2
+
+type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
+type JsonObject = dict[str, JsonValue]
 
 
-class VersionError(ValueError):
-    """A library's version is unreadable or not X.Y.Z; the message names the library."""
+class VersionError(ValueError): ...
 
 
 class Library(ABC):
-    """One library release.json lists. A release follows a change to its code: its `src` folder,
-    its manifest and any `extra_code` files, tests and test fixtures excluded."""
-
     manifest: ClassVar[str]
-    # glob patterns of its test files, relative to its folder
+    # test globs: a test-only change releases nothing
     tests: ClassVar[tuple[str, ...]]
 
     def __init__(self, config: LibraryConfig) -> None:
-        self.name = config.name
-        self._folder = PurePosixPath(config.path)
-        self._tag_prefix = config.tag_prefix
-        # git pathspecs from the repository root; in a glob, **/ matches any depth, even none
-        code = (CODE_FOLDER, self.manifest, *config.extra_code)
-        self._code = (
-            *(str(self._folder / path) for path in code),
+        self.name: str = config.name
+        self._folder: PurePosixPath = PurePosixPath(config.path)
+        self._tag_prefix: str = config.tag_prefix
+        # in a git glob, **/ matches any depth, even none
+        self._code: tuple[str, ...] = (
+            *(
+                str(self._folder / path)
+                for path in (CODE_FOLDER, self.manifest, *config.extra_code)
+            ),
             *(f":(exclude,glob){self._folder / pattern}" for pattern in self.tests),
         )
 
@@ -54,7 +62,6 @@ class Library(ABC):
         return f"{self._tag_prefix}{version}"
 
     def exists_at(self, repo: Repo, revision: str) -> bool:
-        """Whether its manifest is in the repository at a git revision."""
         try:
             repo.commit(revision).tree / str(self._folder / self.manifest)
         except KeyError:
@@ -63,53 +70,56 @@ class Library(ABC):
 
     def version_at(self, repo: Repo, revision: str) -> Version:
         try:
-            text = self._version(self._manifest_at(repo, revision))
-        except (GitCommandError, ValueError, KeyError, TypeError) as error:
-            message = f"could not read {self.name}'s version at {revision}"
-            raise VersionError(message) from error
+            manifest: str = repo.git.show(f"{revision}:{self._folder / self.manifest}")
+            text: str = self._version(manifest)
+        except (GitCommandError, ValueError, KeyError, TypeError) as failure:
+            unreadable: str = f"could not read {self.name}'s version at {revision}"
+            raise VersionError(unreadable) from failure
         try:
             return Version.parse(text)
-        except ValueError as error:
-            message = f"{self.name}: version {text} is not of the form X.Y.Z"
-            raise VersionError(message) from error
+        except ValueError as failure:
+            malformed: str = f"{self.name}: version {text} is not of the form X.Y.Z"
+            raise VersionError(malformed) from failure
 
     def latest_release(self, repo: Repo) -> Version | None:
-        """The highest version tagged, or None before its first release."""
-        prefix = self._tag_prefix
-        tags = [tag.name for tag in repo.tags if tag.name.startswith(prefix)]
-        return max((Version.parse(tag.removeprefix(prefix)) for tag in tags), default=None)
+        return max(
+            (
+                Version.parse(tag.name.removeprefix(self._tag_prefix))
+                for tag in repo.tags
+                if tag.name.startswith(self._tag_prefix)
+            ),
+            default=None,
+        )
 
     def changed(self, repo: Repo, since: str, until: str) -> bool:
         return bool(repo.git.diff("--name-only", since, until, "--", *self._code))
 
-    def _manifest_at(self, repo: Repo, revision: str) -> str:
-        return str(repo.git.show(f"{revision}:{self._folder / self.manifest}"))
+    @staticmethod
+    @abstractmethod
+    def _version(manifest: str) -> str: ...
 
     @abstractmethod
-    def _version(self, manifest: str) -> str: ...
-
-    @abstractmethod
-    def write_version(self, root: Path, version: Version) -> None:
-        """Writes the version into its manifest and lock file in the working tree at `root`."""
+    def write_version(self, root: Path, version: Version) -> None: ...
 
 
 class PythonLibrary(Library):
-    manifest = PYPROJECT
+    manifest: ClassVar[str] = PYPROJECT
     tests: ClassVar[tuple[str, ...]] = ("**/*_test.py", "**/conftest.py")
 
     @override
-    def _version(self, manifest: str) -> str:
+    @staticmethod
+    def _version(manifest: str) -> str:
         return str(tomllib.loads(manifest)[PROJECT_TABLE][VERSION_KEY])
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
-        pyproject_path = root / self._folder / self.manifest
-        pyproject = tomlkit.parse(pyproject_path.read_text(encoding=ENCODING))
-        project = cast("Table", pyproject[PROJECT_TABLE])
+        pyproject_path: Path = root / self._folder / self.manifest
+        pyproject: TOMLDocument = tomlkit.parse(pyproject_path.read_text(encoding=ENCODING))
+        project: Table = cast("Table", pyproject[PROJECT_TABLE])
         project[VERSION_KEY] = str(version)
         pyproject_path.write_text(tomlkit.dumps(pyproject), encoding=ENCODING)
-        lock_path = root / self._folder / UV_LOCK
-        lock = tomlkit.parse(lock_path.read_text(encoding=ENCODING))
+        lock_path: Path = root / self._folder / UV_LOCK
+        lock: TOMLDocument = tomlkit.parse(lock_path.read_text(encoding=ENCODING))
         for package in cast("AoT", lock[UV_LOCK_PACKAGES]):
             if package[NAME_KEY] == project[NAME_KEY]:
                 package[VERSION_KEY] = str(version)
@@ -117,22 +127,26 @@ class PythonLibrary(Library):
 
 
 class NpmLibrary(Library):
-    manifest = PACKAGE_JSON
+    manifest: ClassVar[str] = PACKAGE_JSON
     tests: ClassVar[tuple[str, ...]] = ("**/*.test.ts",)
 
     @override
-    def _version(self, manifest: str) -> str:
+    @staticmethod
+    def _version(manifest: str) -> str:
         return str(json.loads(manifest)[VERSION_KEY])
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
         for path in (root / self._folder / self.manifest, root / self._folder / PACKAGE_LOCK):
-            data = json.loads(path.read_text(encoding=ENCODING))
+            data: JsonObject = json.loads(path.read_text(encoding=ENCODING))
             data[VERSION_KEY] = str(version)
             # package-lock.json repeats the version in its root package entry
             if NPM_LOCK_PACKAGES in data:
-                data[NPM_LOCK_PACKAGES][NPM_ROOT_PACKAGE][VERSION_KEY] = str(version)
-            text = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
+                packages: dict[str, JsonObject] = cast(
+                    "dict[str, JsonObject]", data[NPM_LOCK_PACKAGES]
+                )
+                packages[NPM_ROOT_PACKAGE][VERSION_KEY] = str(version)
+            text: str = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
             path.write_text(f"{text}\n", encoding=ENCODING)
 
 
@@ -143,6 +157,5 @@ KINDS: dict[LibraryKind, type[Library]] = {
 
 
 def load_libraries(root: Path, file_name: str) -> tuple[Library, ...]:
-    """The libraries the release config at `root` lists."""
-    config = load_release_config(root, file_name)
+    config: ReleaseConfig = load_config(root / file_name, ReleaseConfig)
     return tuple(KINDS[library.kind](library) for library in config.libraries)

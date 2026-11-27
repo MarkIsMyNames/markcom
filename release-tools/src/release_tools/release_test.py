@@ -4,6 +4,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from semver import Version
 
 from release_tools.release import main
 
@@ -20,12 +21,7 @@ def declared(clone, library):
 
 
 def bumped(version, level):
-    major, minor, patch = (int(part) for part in version.split("."))
-    return {
-        "patch": f"{major}.{minor}.{patch + 1}",
-        "minor": f"{major}.{minor + 1}.0",
-        "major": f"{major + 1}.0.0",
-    }[level]
+    return str(Version.parse(version).next_version(level))
 
 
 def changed_lines(clone, before, after, path):
