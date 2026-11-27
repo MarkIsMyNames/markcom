@@ -51,25 +51,20 @@ class CommandResult:
 
 class CommandRunner(ABC):
     @abstractmethod
-    def run(self, args: Sequence[str]) -> None:
-        """Run with standard input and output left as they are.
-        Raises CommandFailedError on a non-zero exit."""
+    def run(self, args: Sequence[str]) -> None: ...
 
     @abstractmethod
     def run_with_input(self, args: Sequence[str], stdin_text: str) -> None:
-        """Run with stdin_text as standard input. Raises CommandFailedError on a non-zero exit."""
+        """For prompts such as sdkmanager --licenses, which waits for "y" on stdin."""
 
     @abstractmethod
     def capture(self, args: Sequence[str]) -> CommandResult:
-        """Run quietly and return the exit code and output; a non-zero exit is not an error here,
-        because callers use it to ask questions (is this installed?)."""
+        """Never raises on non-zero: callers use the exit code to ask (is this installed?)."""
 
     @abstractmethod
     def background(
         self, args: Sequence[str], stop_timeout: timedelta
-    ) -> AbstractContextManager[None]:
-        """Run for the duration of the block; on exit terminate it, wait up to stop_timeout,
-        then kill it if it has not ended."""
+    ) -> AbstractContextManager[None]: ...
 
 
 class SubprocessRunner(CommandRunner):
