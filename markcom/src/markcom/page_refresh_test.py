@@ -7,8 +7,11 @@ from nicegui import Event, core, ui
 from nicegui.testing import general
 from nicegui.testing.user import User
 
+from markcom.own_origin import LOOPBACK
 from markcom.page_refresh import announce, keep_current
 from markcom.ui_server import configure
+
+PORT = 8765
 
 
 class Page:
@@ -46,7 +49,7 @@ async def user(page, monkeypatch):
         async with (
             core.app.router.lifespan_context(core.app),
             httpx.AsyncClient(
-                transport=httpx.ASGITransport(core.app), base_url="http://127.0.0.1:8765"
+                transport=httpx.ASGITransport(core.app), base_url=f"http://{LOOPBACK}:{PORT}"
             ) as client,
         ):
             yield User(client)

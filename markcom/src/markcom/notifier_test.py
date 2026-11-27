@@ -8,6 +8,8 @@ from desktop_notifier import Urgency
 
 from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
 
+DISPLAY_SEC = 8
+
 
 class FakeNotifier:
     """desktop-notifier stand-in: records each send as (title, message, urgency, timeout) after
@@ -36,13 +38,13 @@ def library(monkeypatch):
 
 
 def test_send_returns_once_shown_for_the_display_time_given(library):
-    DesktopNotifier("App", Path("app.png")).send("t", "m", Urgency.Normal, 8)
-    assert library.sent == [("t", "m", Urgency.Normal, 8)]
+    DesktopNotifier("App", Path("app.png")).send("t", "m", Urgency.Normal, DISPLAY_SEC)
+    assert library.sent == [("t", "m", Urgency.Normal, DISPLAY_SEC)]
 
 
 def test_never_expires_sec_keeps_the_notification_until_dismissed(library):
     DesktopNotifier("App", Path("app.png")).send("t", "m", Urgency.Critical, NEVER_EXPIRES_SEC)
-    assert library.sent == [("t", "m", Urgency.Critical, 0)]
+    assert library.sent == [("t", "m", Urgency.Critical, NEVER_EXPIRES_SEC)]
 
 
 def test_a_relative_icon_reaches_the_desktop_as_an_absolute_path(library):
@@ -53,7 +55,7 @@ def test_a_relative_icon_reaches_the_desktop_as_an_absolute_path(library):
 def test_sends_from_two_threads_at_once_both_arrive(library):
     notifier = DesktopNotifier("App", Path("app.png"))
     senders = [
-        threading.Thread(target=notifier.send, args=(title, "m", Urgency.Normal, 8))
+        threading.Thread(target=notifier.send, args=(title, "m", Urgency.Normal, DISPLAY_SEC))
         for title in ("a", "b")
     ]
     for sender in senders:
@@ -64,12 +66,12 @@ def test_sends_from_two_threads_at_once_both_arrive(library):
 
 
 async def test_a_send_from_inside_a_running_event_loop_arrives(library):
-    DesktopNotifier("App", Path("app.png")).send("t", "m", Urgency.Normal, 8)
-    assert library.sent == [("t", "m", Urgency.Normal, 8)]
+    DesktopNotifier("App", Path("app.png")).send("t", "m", Urgency.Normal, DISPLAY_SEC)
+    assert library.sent == [("t", "m", Urgency.Normal, DISPLAY_SEC)]
 
 
 def test_programming_errors_are_not_hidden(monkeypatch):
     monkeypatch.setattr(desktop_notifier, "DesktopNotifier", FakeNotifier([], KeyError("bug")))
     notifier = DesktopNotifier("App", Path("app.png"))
     with pytest.raises(KeyError):
-        notifier.send("t", "m", Urgency.Normal, 8)
+        notifier.send("t", "m", Urgency.Normal, DISPLAY_SEC)

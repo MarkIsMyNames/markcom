@@ -22,6 +22,11 @@ SERVICE = "org.freedesktop.Notifications"
 SERVICE_PATH = "/org/freedesktop/Notifications"
 # Notify replies with the new notification's ID, never 0.
 NOTIFICATION_ID = 1
+# freedesktop Notifications spec: urgency hint byte for critical.
+CRITICAL_URGENCY_BYTE = 2
+MS_PER_SEC = 1000
+DISPLAY_SEC = 3
+WAIT_SEC = 5
 TAKEN = "taken"
 READY = "ready"
 
@@ -89,19 +94,19 @@ class FakeNotificationService:
 
     def __enter__(self):
         self._process.start()
-        if self._events.get(timeout=5) == TAKEN:
-            self._process.join(timeout=5)
+        if self._events.get(timeout=WAIT_SEC) == TAKEN:
+            self._process.join(timeout=WAIT_SEC)
             taken = f"{SERVICE} is taken: run under dbus-run-session, not the desktop's bus"
             raise RuntimeError(taken)
         return self
 
     def __exit__(self, *_):
         self._stop.set()
-        self._process.join(timeout=5)
+        self._process.join(timeout=WAIT_SEC)
 
     def next_call(self):
         """(app_name, title, body, hints, timeout_ms) of the next Notify call received."""
-        return self._events.get(timeout=5)
+        return self._events.get(timeout=WAIT_SEC)
 
 
 @pytest.fixture
@@ -111,17 +116,26 @@ def service():
 
 
 def test_notification_arrives_with_its_fields(service):
-    DesktopNotifier("Integration App", Path("app.png")).send("title", "body", Urgency.Normal, 3)
+    DesktopNotifier("Integration App", Path("app.png")).send(
+        "title", "body", Urgency.Normal, DISPLAY_SEC
+    )
     app_name, title, message, _, timeout_ms = service.next_call()
-    assert (app_name, title, message, timeout_ms) == ("Integration App", "title", "body", 3000)
+    assert (app_name, title, message, timeout_ms) == (
+        "Integration App",
+        "title",
+        "body",
+        DISPLAY_SEC * MS_PER_SEC,
+    )
 
 
 def test_urgency_arrives(service):
-    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Critical, 3)
+    DesktopNotifier("Integration App", Path("app.png")).send(
+        "t", "m", Urgency.Critical, DISPLAY_SEC
+    )
     _, _, _, hints, _ = service.next_call()
-    assert hints["urgency"] == 2
+    assert hints["urgency"] == CRITICAL_URGENCY_BYTE
 
 
 async def test_notification_sent_from_inside_an_event_loop_arrives(service):
-    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, 3)
+    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, DISPLAY_SEC)
     assert service.next_call()

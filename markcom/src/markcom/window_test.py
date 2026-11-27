@@ -5,7 +5,7 @@ import socket
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from typing import override
+from typing import NamedTuple, override
 
 import psutil
 import pytest
@@ -14,6 +14,7 @@ from PySide6.QtCore import QMetaObject, Qt, QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
+from markcom.own_origin import LOOPBACK
 from markcom.window import WebWindow
 
 # no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
@@ -24,6 +25,15 @@ os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 # a window process starts Python, Qt and Chromium before it asks for the page
 WAIT_MS = 30000
 QUIET_MS = 1000
+CHILD_WAIT_SEC = 60
+ANY_FREE_PORT = 0
+CLOSED_PORT = 9  # discard port: nothing listens
+ICON_PX = 64
+
+
+class Page(NamedTuple):
+    url: str
+    requests: list
 
 
 class RecordingHandler(SimpleHTTPRequestHandler):
@@ -49,9 +59,12 @@ def site(tmp_path_factory):
         pass
 
     Handler.requests = requests
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Handler, directory=str(folder)))
+    server = ThreadingHTTPServer(
+        (str(LOOPBACK), ANY_FREE_PORT), partial(Handler, directory=str(folder))
+    )
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_address[1]}", requests
+    _, port = server.server_address
+    yield f"http://{LOOPBACK}:{port}", requests
     server.shutdown()
     server.server_close()
 
@@ -74,7 +87,7 @@ def qapp():
 @pytest.fixture
 def icon(tmp_path):
     path = tmp_path / "icon.png"
-    image = QImage(64, 64, QImage.Format.Format_ARGB32)
+    image = QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
     image.save(str(path))
     return path
@@ -84,7 +97,7 @@ def icon(tmp_path):
 def page(site):
     base, requests = site
     requests.clear()
-    return f"{base}/index.html", requests
+    return Page(f"{base}/index.html", requests)
 
 
 @pytest.fixture
@@ -93,7 +106,7 @@ def make_window(request, page, icon):
     windows = []
 
     def make():
-        window = WebWindow("App", HttpUrl(page[0]), icon)
+        window = WebWindow("App", HttpUrl(page.url), icon)
         windows.append(window)
         return window
 
@@ -128,16 +141,16 @@ def test_close_before_the_first_open_does_nothing(make_window):
 def test_the_page_loads_on_the_first_open_not_before(make_window, page, qtbot):
     window = make_window()
     qtbot.wait(QUIET_MS)
-    assert page[1] == []
+    assert page.requests == []
     window.open()
     assert window.is_open()
-    qtbot.waitUntil(lambda: "/index.html" in page[1], timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: "/index.html" in page.requests, timeout=WAIT_MS)
 
 
 def test_close_returns_once_the_window_process_has_ended(make_window, page, qtbot):
     window = make_window()
     window.open()
-    qtbot.waitUntil(lambda: "/index.html" in page[1], timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: "/index.html" in page.requests, timeout=WAIT_MS)
     window.close()
     assert not window.is_open()
     assert window_processes() == []
@@ -146,7 +159,7 @@ def test_close_returns_once_the_window_process_has_ended(make_window, page, qtbo
 def test_closing_the_window_saves_its_size(make_window, page, config_home, qtbot):
     window = make_window()
     window.open()
-    qtbot.waitUntil(lambda: "/index.html" in page[1], timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: "/index.html" in page.requests, timeout=WAIT_MS)
     window.close()
     qtbot.waitUntil(lambda: window_processes() == [], timeout=WAIT_MS)
     assert (config_home / "markcom" / "App.conf").exists()
@@ -155,41 +168,43 @@ def test_closing_the_window_saves_its_size(make_window, page, config_home, qtbot
 def test_a_window_whose_process_ends_by_itself_is_closed(make_window, page, qtbot):
     window = make_window()
     window.open()
-    qtbot.waitUntil(lambda: "/index.html" in page[1], timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: "/index.html" in page.requests, timeout=WAIT_MS)
     (process,) = window_processes()
     process.terminate()
     qtbot.waitUntil(lambda: not window.is_open(), timeout=WAIT_MS)
     window.open()
-    qtbot.waitUntil(lambda: page[1].count("/index.html") == 2, timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: page.requests.count("/index.html") == 2, timeout=WAIT_MS)
 
 
 def test_opening_twice_keeps_one_window_process(make_window, page, qtbot):
     window = make_window()
     window.open()
-    qtbot.waitUntil(lambda: "/index.html" in page[1], timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: "/index.html" in page.requests, timeout=WAIT_MS)
     window.open()
     qtbot.wait(QUIET_MS)
     assert window.is_open()
     assert len(window_processes()) == 1
-    assert page[1].count("/index.html") == 1
+    assert page.requests.count("/index.html") == 1
 
 
 def test_reopening_loads_the_page_afresh(make_window, page, qtbot):
     window = make_window()
     window.open()
-    qtbot.waitUntil(lambda: "/index.html" in page[1], timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: "/index.html" in page.requests, timeout=WAIT_MS)
     window.close()
     window.open()
     assert window.is_open()
-    qtbot.waitUntil(lambda: page[1].count("/index.html") == 2, timeout=WAIT_MS)
+    qtbot.waitUntil(lambda: page.requests.count("/index.html") == 2, timeout=WAIT_MS)
 
 
 @pytest.mark.usefixtures("qapp")
 def test_the_page_address_is_not_on_the_window_processs_command_line(page, icon, qtbot):
-    window = WebWindow("App", HttpUrl(f"{page[0]}?token=SECRET"), icon)
+    window = WebWindow("App", HttpUrl(f"{page.url}?token=SECRET"), icon)
     window.open()
     try:
-        qtbot.waitUntil(lambda: any("token=SECRET" in path for path in page[1]), timeout=WAIT_MS)
+        qtbot.waitUntil(
+            lambda: any("token=SECRET" in path for path in page.requests), timeout=WAIT_MS
+        )
         (process,) = window_processes()
         assert "SECRET" not in " ".join(process.cmdline())
     finally:
@@ -200,18 +215,20 @@ def test_the_page_address_is_not_on_the_window_processs_command_line(page, icon,
 @pytest.fixture
 def silent_server():
     """Accepts connections but never answers, so a page never finishes loading."""
-    server = socket.create_server(("127.0.0.1", 0))
+    server = socket.create_server((str(LOOPBACK), ANY_FREE_PORT))
+    _, port = server.getsockname()
     accepted = []
 
     def accept():
         while True:
             try:
-                accepted.append(server.accept()[0])
+                connection, _ = server.accept()
+                accepted.append(connection)
             except OSError:
                 return
 
     threading.Thread(target=accept, daemon=True).start()
-    yield f"http://127.0.0.1:{server.getsockname()[1]}/", accepted
+    yield f"http://{LOOPBACK}:{port}/", accepted
     server.shutdown(socket.SHUT_RDWR)
     server.close()
     for connection in accepted:
@@ -251,9 +268,12 @@ def run_an_app_that_quits_with_its_window_open(folder, icon):
     """Child process: exits EX_OK only if its window process ended before the app did."""
     app = QApplication(["Quitting"])
     app.setQuitOnLastWindowClosed(False)
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuitOnRequest, directory=str(folder)))
+    server = ThreadingHTTPServer(
+        (str(LOOPBACK), ANY_FREE_PORT), partial(QuitOnRequest, directory=str(folder))
+    )
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
+    _, port = server.server_address
+    url = f"http://{LOOPBACK}:{port}/index.html"
     WebWindow("Quitting", HttpUrl(url), icon).open()
     app.exec()
     server.shutdown()
@@ -267,7 +287,7 @@ def test_quitting_the_app_ends_an_open_windows_process_first(tmp_path, icon):
     )
     child.start()
     try:
-        child.join(60)
+        child.join(CHILD_WAIT_SEC)
         assert child.exitcode == os.EX_OK
     finally:
         if child.is_alive():
@@ -278,7 +298,7 @@ def test_quitting_the_app_ends_an_open_windows_process_first(tmp_path, icon):
 def build_a_window_with_no_app(icon):
     """Child process: no QApplication, so none of the other tests' is present."""
     with pytest.raises(RuntimeError):
-        WebWindow("Early", HttpUrl("http://127.0.0.1:9/"), icon)
+        WebWindow("Early", HttpUrl(f"http://{LOOPBACK}:{CLOSED_PORT}/"), icon)
 
 
 def test_a_window_built_before_the_app_fails(icon):
@@ -286,7 +306,7 @@ def test_a_window_built_before_the_app_fails(icon):
         target=build_a_window_with_no_app, args=(icon,)
     )
     child.start()
-    child.join(60)
+    child.join(CHILD_WAIT_SEC)
     assert child.exitcode == os.EX_OK
 
 
@@ -302,11 +322,11 @@ def run_a_window_without_a_tray(url, icon):
 
 def test_without_a_tray_closing_the_window_quits_the_app(page, icon):
     child = multiprocessing.get_context("spawn").Process(
-        target=run_a_window_without_a_tray, args=(page[0], icon)
+        target=run_a_window_without_a_tray, args=(page.url, icon)
     )
     child.start()
     try:
-        child.join(60)
+        child.join(CHILD_WAIT_SEC)
         assert child.exitcode == os.EX_OK
     finally:
         if child.is_alive():

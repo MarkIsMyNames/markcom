@@ -1,5 +1,4 @@
-"""A web window in its own process (markcom.window_process), so a closed window holds no
-QtWebEngine memory."""
+"""Window in own process, so a closed window holds no QtWebEngine memory."""
 
 import logging
 import os
@@ -12,31 +11,32 @@ from pydantic import HttpUrl
 from PySide6.QtCore import QCoreApplication, QProcess, QProcessEnvironment
 from PySide6.QtWidgets import QApplication
 
+from markcom.config import CONFIG
 from markcom.tray import TrayTarget
 from markcom.window_messages import SPEC_VARIABLE, WindowSpec
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# -P stops the app's working folder shadowing a module; -c, unlike -m, keeps the module's log name.
+# -P: working folder can't shadow a module; -c, unlike -m, keeps the module's log name
 WINDOW_PROCESS: tuple[str, ...] = ("-P", "-c", "from markcom.window_process import main; main()")
 
 
 class WebWindow(TrayTarget):
-    """GUI thread only, as Qt requires."""
-
     def __init__(self, title: str, url: HttpUrl, icon: Path) -> None:
+        self._url: HttpUrl = url
         self._spec: WindowSpec = WindowSpec(
             title=title,
-            url=url,
-            icon=icon,
+            url=str(url),
+            icon=str(icon),
+            width=CONFIG.window.width,
+            height=CONFIG.window.height,
         )
-        # None: no window open
         self._process: QProcess | None = None
         app: QCoreApplication | None = QApplication.instance()
         if app is None:
             no_app: str = "build the WebWindow after the QApplication"
             raise RuntimeError(no_app)
-        # Otherwise Qt kills a running window process at exit.
+        # else Qt kills a running window process at exit
         app.aboutToQuit.connect(self.close)
 
     @override
@@ -48,14 +48,14 @@ class WebWindow(TrayTarget):
         if self._process is not None:
             logger.debug("The window is already open")
             return
-        # Set before start(), which signals a failure to start from within.
+        # set before start(), which signals a start failure from within
         self._process = self._new_process()
-        # Scheme, host and port only: the URL may carry a token.
+        # scheme, host, port only: URL may carry a token
         logger.info(
             "Starting the window for %s://%s:%s",
-            self._spec.url.scheme,
-            self._spec.url.host,
-            self._spec.url.port,
+            self._url.scheme,
+            self._url.host,
+            self._url.port,
         )
         self._process.start()
 
@@ -66,13 +66,13 @@ class WebWindow(TrayTarget):
             return
         logger.debug("Closing the window")
         process: QProcess = self._process
-        # The end of its input closes the window, and its process ends.
+        # end of its stdin closes the window and ends the process
         process.closeWriteChannel()
         process.waitForFinished()
 
     def _new_process(self) -> QProcess:
         environment: QProcessEnvironment = QProcessEnvironment.systemEnvironment()
-        environment.insert(SPEC_VARIABLE, self._spec.model_dump_json())
+        environment.insert(SPEC_VARIABLE, self._spec.to_json())
         process: QProcess = QProcess()
         process.setProgram(sys.executable)
         process.setArguments(list(WINDOW_PROCESS))
@@ -91,7 +91,6 @@ class WebWindow(TrayTarget):
     def _ended(self, process: QProcess) -> None:
         self._process = None
         process.deleteLater()
-        # As for Qt's own windows: without a tray, closing the last window quits the app.
         if QApplication.quitOnLastWindowClosed() and not any(
             window.isVisible() for window in QApplication.topLevelWindows()
         ):

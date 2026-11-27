@@ -1,10 +1,4 @@
-"""A loopback server's own address, and an ASGI guard that refuses every other Host or Origin.
-
-Bound to loopback, a server is out of other machines' reach, but not of web pages in this
-machine's browser: one could point a hostname of its own at 127.0.0.1 (DNS rebinding), or open
-the server's websocket from another origin. Refusing a foreign Host, or Origin if there is one, on
-every request, page and websocket alike, stops both.
-"""
+"""Refuse foreign Host or Origin: web pages reach loopback by DNS rebinding or websocket."""
 
 import logging
 from http import HTTPStatus
@@ -23,9 +17,8 @@ from markcom.web_scheme import HOST_HEADER, ORIGIN_HEADER, WebProtocol
 logger: logging.Logger = logging.getLogger(__name__)
 
 LOOPBACK: IPv4Address = IPv4Address(INADDR_LOOPBACK)
-# What browsers also call LOOPBACK.
 LOOPBACK_NAME: str = "localhost"
-# Loopback only, so no TLS.
+# loopback only, so no TLS
 SCHEME: WebProtocol = WebProtocol.HTTP
 
 
@@ -37,12 +30,9 @@ def local_url(host: IPv4Address, port: int) -> HttpUrl:
 
 
 class OwnOriginOnly:
-    """ASGI middleware: passes on only requests whose Host, and Origin if any, is host:port, or
-    localhost:port when host is 127.0.0.1."""
-
     def __init__(self, app: ASGIApp, host: IPv4Address, port: int) -> None:
         if port < 1:
-            # 0 asks the OS for any free port, which this guard can't know, so it'd refuse all
+            # port 0 means any free port, unknowable here, so every request would be refused
             invalid: str = f"port {port}: give the port the server listens on"
             raise InvalidPortError(invalid)
         names: list[str] = [str(host), LOOPBACK_NAME] if host == LOOPBACK else [str(host)]
@@ -61,7 +51,7 @@ class OwnOriginOnly:
     @staticmethod
     def _log_refusal(scope: Scope) -> None:
         headers: Headers = Headers(scope=scope)
-        # %r: header values are untrusted, and repr keeps a CR or LF from forging a log line
+        # %r: untrusted header; repr stops CR or LF forging a log line
         logger.warning(
             "refused %s from Host %r, Origin %r",
             scope["type"],

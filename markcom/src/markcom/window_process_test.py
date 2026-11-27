@@ -2,17 +2,16 @@ import os
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from typing import override
+from typing import NamedTuple, override
 
 import pytest
-from pydantic import HttpUrl
 from PySide6.QtCore import QEvent, QObject, QSettings, QSize, QUrl, Slot
 from PySide6.QtGui import QColor, QDesktopServices, QImage, QPalette
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication
 
 from markcom.config import CONFIG
+from markcom.own_origin import LOOPBACK
 from markcom.window_messages import WindowSpec
 from markcom.window_process import OwnOriginWindow
 
@@ -22,6 +21,14 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 
 QUIET_MS = 500
+ANY_FREE_PORT = 0
+CLOSED_PORT = 9  # discard port: nothing listens
+ICON_PX = 64
+
+
+class Site(NamedTuple):
+    url: str
+    requests: list
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -40,9 +47,12 @@ class RecordingHandler(QuietHandler):
 
 
 def serve(folder, handler):
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(handler, directory=str(folder)))
+    server = ThreadingHTTPServer(
+        (str(LOOPBACK), ANY_FREE_PORT), partial(handler, directory=str(folder))
+    )
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server, f"http://127.0.0.1:{server.server_address[1]}"
+    _, port = server.server_address
+    return server, f"http://{LOOPBACK}:{port}"
 
 
 @pytest.fixture(scope="module")
@@ -56,7 +66,7 @@ def other_site(tmp_path_factory):
 
     Handler.requests = requests
     server, base = serve(folder, Handler)
-    yield base, requests
+    yield Site(base, requests)
     server.shutdown()
     server.server_close()
 
@@ -75,7 +85,7 @@ def site(tmp_path_factory, other_site):
     (folder / "index.html").write_text(f"<title>Home</title>{links}", encoding="utf-8")
     (folder / "two.html").write_text("<title>Two</title>", encoding="utf-8")
     (folder / "frame.html").write_text(
-        f'<title>Frame</title><iframe src="{other_site[0]}/inner.html"></iframe>',
+        f'<title>Frame</title><iframe src="{other_site.url}/inner.html"></iframe>',
         encoding="utf-8",
     )
     server, base = serve(folder, QuietHandler)
@@ -117,14 +127,20 @@ def browser(request):
 @pytest.fixture
 def icon(tmp_path):
     path = tmp_path / "icon.png"
-    image = QImage(64, 64, QImage.Format.Format_ARGB32)
+    image = QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
     image.save(str(path))
     return path
 
 
 def spec_for(url, icon):
-    return WindowSpec(title="App", url=HttpUrl(url), icon=Path(icon))
+    return WindowSpec(
+        title="App",
+        url=url,
+        icon=str(icon),
+        width=CONFIG.window.width,
+        height=CONFIG.window.height,
+    )
 
 
 @pytest.fixture
@@ -179,7 +195,7 @@ def test_the_window_stays_hidden_until_its_page_loads(make_window, qtbot):
 
 def test_a_page_that_fails_to_load_still_shows_the_window(make_window, qtbot):
     # port 9 (discard): nothing listens, so the load fails
-    window = make_window(base="http://127.0.0.1:9")
+    window = make_window(base=f"http://{LOOPBACK}:{CLOSED_PORT}")
     qtbot.waitUntil(window.isVisible)
 
 
@@ -263,5 +279,5 @@ def test_non_web_links_neither_load_nor_reach_the_desktop(make_window, browser, 
 
 def test_another_origin_in_an_iframe_loads_in_the_page(make_window, browser, other_site, qtbot):
     make_window("frame.html")
-    qtbot.waitUntil(lambda: "/inner.html" in other_site[1])
+    qtbot.waitUntil(lambda: "/inner.html" in other_site.requests)
     assert browser.urls == []

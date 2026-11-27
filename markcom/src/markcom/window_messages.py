@@ -1,16 +1,25 @@
-"""The window process's spec, apart from window.py so the window process needn't import the tray."""
+"""Standard library only: importing pydantic would add a third to window start-up."""
 
-from pathlib import Path
+import json
+from dataclasses import asdict, dataclass
+from typing import Self
 
-from pydantic import HttpUrl
-
-from markcom.config import StrictModel
-
-# The environment, not argv: any local user can read argv, and the URL may carry a token.
+# environment, not argv: any local user can read argv, and URL may carry a token
 SPEC_VARIABLE: str = "MARKCOM_WINDOW_SPEC"
 
 
-class WindowSpec(StrictModel):
+@dataclass(frozen=True)
+class WindowSpec:
     title: str
-    url: HttpUrl
-    icon: Path
+    url: str
+    icon: str
+    width: int
+    height: int
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self))
+
+    @classmethod
+    def from_json(cls, text: str) -> Self:
+        # parent process wrote it, so trusted
+        return cls(**json.loads(text))

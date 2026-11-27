@@ -20,6 +20,8 @@ from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 WAIT_SEC = 2
+DISPLAY_SEC = 8
+ICON_PX = 64
 app_log = logging.getLogger("app")
 
 
@@ -65,7 +67,7 @@ def make_tray(tmp_path):
     """Builds a tray on its own QApplication; both end with the test, as Qt allows one at a
     time."""
     icon = tmp_path / "icon.png"
-    image = QImage(64, 64, QImage.Format.Format_ARGB32)
+    image = QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
     image.save(str(icon))
     with ExitStack() as stack:
@@ -73,7 +75,7 @@ def make_tray(tmp_path):
         stack.callback(app.shutdown)
 
         def make(notifier=None, target=None, actions=()):
-            notifications = None if notifier is None else TrayNotifications(notifier, 8)
+            notifications = None if notifier is None else TrayNotifications(notifier, DISPLAY_SEC)
             return stack.enter_context(
                 Tray(app, icon, notifications, target or FakeWindow(), actions)
             )
@@ -147,7 +149,9 @@ def test_menu_click_returns_before_a_slow_action_and_its_failure_is_contained(ma
 
 
 def _has_badge():
-    image = icon().icon().pixmap(64, 64).toImage().convertToFormat(QImage.Format.Format_RGB32)
+    image = (
+        icon().icon().pixmap(ICON_PX, ICON_PX).toImage().convertToFormat(QImage.Format.Format_RGB32)
+    )
     return any(
         image.pixelColor(x, y) == QColor(CONFIG.tray.badge_colour)
         for x in range(image.width())
@@ -159,10 +163,13 @@ def test_notifications_sent_through_the_tray_show_a_badge_until_a_left_click(mak
     sent = SentNotifications()
     tray = make_tray(notifier=sent)
     assert not _has_badge()
-    tray.send("feed", "down", Urgency.Critical, 8)
-    tray.send("login", "down", Urgency.Critical, 8)
+    tray.send("feed", "down", Urgency.Critical, DISPLAY_SEC)
+    tray.send("login", "down", Urgency.Critical, DISPLAY_SEC)
     QApplication.processEvents()
-    assert sent == [("feed", "down", Urgency.Critical, 8), ("login", "down", Urgency.Critical, 8)]
+    assert sent == [
+        ("feed", "down", Urgency.Critical, DISPLAY_SEC),
+        ("login", "down", Urgency.Critical, DISPLAY_SEC),
+    ]
     assert _has_badge()
     left_click()
     assert not _has_badge()
@@ -171,7 +178,7 @@ def test_notifications_sent_through_the_tray_show_a_badge_until_a_left_click(mak
 def test_a_tray_without_a_notifier_refuses_to_send(make_tray):
     tray = make_tray()
     with pytest.raises(RuntimeError):
-        tray.send("t", "m", Urgency.Critical, 0)
+        tray.send("t", "m", Urgency.Critical, NEVER_EXPIRES_SEC)
 
 
 def test_quit_ends_exec(make_tray):
@@ -182,7 +189,7 @@ def test_quit_ends_exec(make_tray):
 
 def test_the_icon_shows_until_the_tray_is_left(tmp_path):
     icon_path = tmp_path / "icon.png"
-    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32).save(str(icon_path))
     with ExitStack() as stack:
         app = QApplication(["App"])
         stack.callback(app.shutdown)
@@ -199,7 +206,7 @@ def test_the_tray_does_not_quit_when_its_last_window_closes(make_tray):
 @pytest.mark.parametrize(
     ("level", "urgency", "display_sec"),
     [
-        (logging.ERROR, Urgency.Normal, 8),
+        (logging.ERROR, Urgency.Normal, DISPLAY_SEC),
         (logging.CRITICAL, Urgency.Critical, NEVER_EXPIRES_SEC),
     ],
 )
@@ -267,12 +274,12 @@ def test_a_tray_without_a_notifier_does_not_fail_on_error_records(make_tray):
 
 def test_records_are_not_sent_once_the_tray_is_left(tmp_path):
     icon_path = tmp_path / "icon.png"
-    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32).save(str(icon_path))
     sent = SentNotifications()
     with ExitStack() as stack:
         app = QApplication(["App"])
         stack.callback(app.shutdown)
-        with Tray(app, icon_path, TrayNotifications(sent, 8), FakeWindow(), ()):
+        with Tray(app, icon_path, TrayNotifications(sent, DISPLAY_SEC), FakeWindow(), ()):
             pass
         app_log.error("after")
     assert sent == []

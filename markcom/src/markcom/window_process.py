@@ -1,5 +1,4 @@
-"""The web window's own process, which ends when its stdin does. A fresh window each open also
-avoids Wayland showing a re-shown window at the wrong scale, which QtWebEngine stretched."""
+"""Own process, fresh each open: Wayland shows a re-shown window at wrong scale."""
 
 import logging
 import os
@@ -15,21 +14,17 @@ from PySide6.QtWebEngineCore import (
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget
 
-from markcom.config import CONFIG
 from markcom.web_scheme import WebProtocol
 from markcom.window_messages import SPEC_VARIABLE, WindowSpec
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# Links that leave the window for the default browser; any other scheme is refused.
 BROWSER_SCHEMES: frozenset[WebProtocol] = frozenset({WebProtocol.HTTP, WebProtocol.HTTPS})
 ORGANISATION: str = "markcom"
 GEOMETRY_KEY: str = "geometry"
 
 
 class _OwnOriginPage(QWebEnginePage):
-    """No address bar or Back button, so other sites open in the default browser."""
-
     def __init__(self, origin: QUrl, parent: QWidget) -> None:
         super().__init__(parent)
         self._origin: QUrl = origin
@@ -69,26 +64,23 @@ class _OwnOriginPage(QWebEnginePage):
 
 
 class OwnOriginWindow(QMainWindow):
-    """The page in a window, at the size the last one saved in `settings`. Hidden until the page
-    first loads, so a tray click never shows an empty window."""
-
     def __init__(self, spec: WindowSpec, settings: QSettings) -> None:
         super().__init__()
         self._settings: QSettings = settings
-        start: QUrl = QUrl(str(spec.url))
+        start: QUrl = QUrl(spec.url)
         view: QWebEngineView = QWebEngineView(self)
         page: _OwnOriginPage = _OwnOriginPage(start, view)
-        # Until the page draws, the theme's colour shows rather than white.
+        # theme colour, not white, until the page draws
         page.setBackgroundColor(self.palette().color(QPalette.ColorRole.Base))
         view.setPage(page)
         self.setCentralWidget(view)
         self.setWindowTitle(spec.title)
-        self.setWindowIcon(QIcon(str(spec.icon)))
-        self.resize(CONFIG.window.width, CONFIG.window.height)
+        self.setWindowIcon(QIcon(spec.icon))
+        self.resize(spec.width, spec.height)
         geometry: object = settings.value(GEOMETRY_KEY)
         if isinstance(geometry, QByteArray):
             self.restoreGeometry(geometry)
-        # A failed load shows too: Chromium's error page beats a click that seems to do nothing.
+        # hidden until loaded so a click never shows an empty window; failed load shows too
         view.loadFinished.connect(self.show, Qt.ConnectionType.SingleShotConnection)
         logger.info("Loading %s://%s:%d", start.scheme(), start.host(), start.port())
         view.load(start)
@@ -99,11 +91,11 @@ class OwnOriginWindow(QMainWindow):
 
 
 def main() -> None:
-    spec: WindowSpec = WindowSpec.model_validate_json(os.environ.pop(SPEC_VARIABLE))
+    spec: WindowSpec = WindowSpec.from_json(os.environ.pop(SPEC_VARIABLE))
     app: QApplication = QApplication([spec.title])
     window: OwnOriginWindow = OwnOriginWindow(spec, QSettings(ORGANISATION, spec.title))
-    # The app never writes to stdin, so it turns readable only at its end: the app closed the
-    # window or ended. Quit, not close: a window still hidden while loading wouldn't quit on close.
+    # app never writes stdin: readable only at its end, so window closed or app ended
+    # quit, not close: a window hidden while loading wouldn't quit on close
     QSocketNotifier(sys.stdin.fileno(), QSocketNotifier.Type.Read, window).activated.connect(
         app.quit
     )
