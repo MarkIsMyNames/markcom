@@ -78,6 +78,7 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # commands.py: only process launcher, takes list args never a shell; bandit cannot skip per file, so own run
       - id: markcom-language-scanner
         name: "markcom: Language security scanner"
         entry: bash -c 'cd markcom && uv run bandit -q -r src -x '\''*_test.py,src/markcom/commands.py'\'' && uv run bandit -q src/markcom/commands.py -s B404,B603'
