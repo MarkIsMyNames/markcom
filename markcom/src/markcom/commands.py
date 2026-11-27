@@ -79,7 +79,7 @@ class SubprocessRunner(CommandRunner):
     @override
     def capture(self, args: Sequence[str]) -> CommandResult:
         command: list[str] = self._resolve(args)
-        logger.debug("Capturing %s", command)
+        logger.debug("Capturing %s", args[0])
         completed: subprocess.CompletedProcess[str] = subprocess.run(
             command, capture_output=True, text=True, check=False
         )
@@ -92,7 +92,7 @@ class SubprocessRunner(CommandRunner):
     @contextmanager
     def background(self, args: Sequence[str], stop_timeout: timedelta) -> Iterator[None]:
         command: list[str] = self._resolve(args)
-        logger.info("Starting %s in the background", command)
+        logger.info("Starting %s in the background", args[0])
         with subprocess.Popen(
             command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         ) as process:
@@ -107,20 +107,18 @@ class SubprocessRunner(CommandRunner):
                         "%s did not stop within %s of terminate; killing it", args[0], stop_timeout
                     )
                     process.kill()
-        logger.info("Stopped %s, exit code %d", args[0], process.returncode)
+                    process.wait()
+                logger.info("Stopped %s, exit code %d", args[0], process.returncode)
 
     @staticmethod
     def _run_checked(args: Sequence[str], stdin_text: str | None) -> None:
         """stdin_text None leaves standard input as it is."""
         command: list[str] = SubprocessRunner._resolve(args)
-        logger.info("Running %s", command)
+        logger.info("Running %s", args[0])
         completed: subprocess.CompletedProcess[str] = subprocess.run(
-            command, input=stdin_text, stderr=subprocess.PIPE, text=True, check=False
+            command, input=stdin_text, text=True, check=False
         )
         if completed.returncode != 0:
-            logger.error(
-                "%s failed with exit code %d: %s", args[0], completed.returncode, completed.stderr
-            )
             raise CommandFailedError(args[0], completed.returncode)
         logger.info("Finished %s", args[0])
 
