@@ -5,10 +5,8 @@ import type { ParseKeys } from 'i18next';
 export type LocaleValue = string | LocaleRecord;
 export type LocaleRecord = { readonly [key: string]: LocaleValue };
 
-/** Joins a key to the path of the record it sits in. */
 const KEY_SEPARATOR: string = '.';
 
-/** Every dotted key path that ends in a string, with its string. */
 export function flattenLocale(locale: LocaleRecord): ReadonlyMap<string, string> {
   return new Map(
     Object.entries<unknown>(flattenObject(locale, { delimiter: KEY_SEPARATOR })).flatMap(
@@ -69,7 +67,6 @@ export class LocaleSet<Lang extends string, Locale extends LocaleRecord> {
     return this.langs.some((supported: Lang): boolean => supported === lang);
   }
 
-  /** The best supported match for the browser's preferences, else the default. */
   detectLang(preferred: readonly string[]): Lang {
     // match() only ever returns one of the supported languages or the default it was given.
     return match(preferred, this.langs, this.defaultLang) as Lang;

@@ -33,7 +33,6 @@ function toFlatConfigs(value: unknown, name: string): Linter.Config[] {
 
 const SOURCE: string[] = ['**/*.{ts,tsx}'];
 const TESTS: string[] = ['**/*.test.{ts,tsx}', '**/*.stories.tsx', 'e2e/**', 'visual/**'];
-/** The only files allowed raw values: they are where the named values are defined. */
 const VALUE_HOMES: string[] = ['src/config.ts', 'src/styles/tokens.ts', '*.config.ts'];
 const IGNORED: string[] = [
   'build',
@@ -44,7 +43,6 @@ const IGNORED: string[] = [
   'test-results',
   '!.storybook',
 ];
-/** Text-bearing JSX attributes that must come from the locale files. */
 const TEXT_ATTRIBUTES: string[] = [
   'aria-label',
   'aria-description',
@@ -164,7 +162,6 @@ const HOUSE_RULES: Linter.RulesRecord = {
   'no-restricted-syntax': ['error', ...ANNOTATIONS, ...RAW_VALUES],
 };
 
-/** The house ESLint config every react-ui site and web library uses, strictest settings on. */
 export function createEslintConfig(options: EslintOptions): Linter.Config[] {
   return defineConfig(
     globalIgnores(IGNORED),

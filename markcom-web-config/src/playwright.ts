@@ -15,10 +15,6 @@ const SERVER_TIMEOUT_MS: number = 120_000;
 type StoryEntry = { id: string; type: string };
 type StoryIndex = { entries: Record<string, StoryEntry> };
 
-/**
- * The react-ui websites' Playwright config. `visual` screenshots every Storybook story;
- * `e2e` drives the built app, for integration tests when they are asked for.
- */
 export function createPlaywrightConfig(): PlaywrightTestConfig {
   return defineConfig({
     forbidOnly: Boolean(process.env['CI']),
@@ -38,9 +34,8 @@ export function createPlaywrightConfig(): PlaywrightTestConfig {
         use: { ...devices['Desktop Chrome'], baseURL: APP_URL },
       },
     ],
-    // When e2e tests are asked for, also serve the built app (npm run preview) for that project.
     webServer: {
-      command: 'npx vite preview --outDir storybook-static --port 6006 --strictPort',
+      command: `npx vite preview --outDir storybook-static --port ${new URL(STORYBOOK_URL).port} --strictPort`,
       url: STORYBOOK_URL,
       reuseExistingServer: !process.env['CI'],
       timeout: SERVER_TIMEOUT_MS,
@@ -48,7 +43,6 @@ export function createPlaywrightConfig(): PlaywrightTestConfig {
   });
 }
 
-/** One screenshot per story; any pixel difference from the committed baseline fails. */
 export function testStoryScreenshots(): void {
   test('every story matches its baseline', async ({
     page,
