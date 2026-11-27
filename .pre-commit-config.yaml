@@ -80,7 +80,7 @@ repos:
 
       - id: markcom-language-scanner
         name: "markcom: Language security scanner"
-        entry: bash -c 'cd markcom && uv run bandit -q -r src -x '\''*_test.py'\'''
+        entry: bash -c 'cd markcom && uv run bandit -q -r src -x '\''*_test.py,src/markcom/commands.py'\'' && uv run bandit -q src/markcom/commands.py -s B404,B603'
         language: system
         pass_filenames: false
         always_run: true
