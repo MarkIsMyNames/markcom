@@ -78,7 +78,7 @@ Run the `uv` commands in `markcom/` and `release-tools/`, and the `npm` commands
 | `pre-commit install` | Installs the hook that runs every check below, plus Gitleaks and Semgrep, before each commit |
 | `pre-commit run --all-files` | Runs every check on demand, the same as CI |
 | `uv run pytest -q` | Unit tests with an 85% coverage gate (pytest) |
-| `dbus-run-session -- uv run pytest tests/integration --no-cov -q` | Integration tests of Linux notifications over a private D-Bus session (pytest; markcom only) |
+| `dbus-run-session -- uv run pytest e2e --no-cov -q` | End-to-end tests of Linux notifications over a private D-Bus session (pytest; markcom only) |
 | `uv run ruff check .` | Lint (Ruff) |
 | `uv run ruff format --check .` | Format check (Ruff) |
 | `uv run mypy src` | Type check (mypy) |

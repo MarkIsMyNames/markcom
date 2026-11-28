@@ -38,9 +38,9 @@ jobs:
       - name: Tests with coverage gate
         run: uv run pytest -q
       # private session bus, so fake service can own org.freedesktop.Notifications
-      - name: Integration tests
-        if: matrix.library == 'markcom'
-        run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
+      - name: End-to-end tests
+        if: hashFiles(format('{0}/e2e/**', matrix.library)) != ''
+        run: dbus-run-session -- uv run pytest e2e --no-cov -q
 
   versions-unchanged:
     uses: ./.github/workflows/versions-unchanged.yml
