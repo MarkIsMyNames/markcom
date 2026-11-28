@@ -2,7 +2,7 @@ import json
 import tomllib
 from abc import ABC, abstractmethod
 from pathlib import Path, PurePosixPath
-from typing import ClassVar, Final, TypedDict, override
+from typing import Any, ClassVar, override
 
 import tomlkit
 from git import GitCommandError, Repo
@@ -24,24 +24,14 @@ PYPROJECT: str = "pyproject.toml"
 UV_LOCK: str = "uv.lock"
 PACKAGE_JSON: str = "package.json"
 PACKAGE_LOCK: str = "package-lock.json"
-# Final: mypy then takes it as a TypedDict key
-VERSION_KEY: Final = "version"
+VERSION_KEY: str = "version"
 NAME_KEY: str = "name"
 PROJECT_TABLE: str = "project"
 UV_LOCK_PACKAGES: str = "package"
-NPM_LOCK_PACKAGES: Final = "packages"
+NPM_LOCK_PACKAGES: str = "packages"
 NPM_ROOT_PACKAGE: str = ""
 # npm's own formatting
 NPM_INDENT: int = 2
-
-
-# only the keys release writes; json.dumps keeps the rest
-class NpmManifest(TypedDict):
-    version: str
-
-
-class NpmLock(NpmManifest):
-    packages: dict[str, NpmManifest]
 
 
 class VersionError(ValueError): ...
@@ -145,18 +135,18 @@ class NpmLibrary(Library):
     @override
     def write_version(self, root: Path, version: Version) -> None:
         manifest_path: Path = root / self._folder / self.manifest
-        manifest: NpmManifest = json.loads(manifest_path.read_text(encoding=ENCODING))
+        manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding=ENCODING))
         manifest[VERSION_KEY] = str(version)
         self._write_json(manifest_path, manifest)
         lock_path: Path = root / self._folder / PACKAGE_LOCK
-        lock: NpmLock = json.loads(lock_path.read_text(encoding=ENCODING))
+        lock: dict[str, Any] = json.loads(lock_path.read_text(encoding=ENCODING))
         # package-lock.json repeats the version in its root package entry
         lock[VERSION_KEY] = str(version)
         lock[NPM_LOCK_PACKAGES][NPM_ROOT_PACKAGE][VERSION_KEY] = str(version)
         self._write_json(lock_path, lock)
 
     @staticmethod
-    def _write_json(path: Path, data: NpmManifest) -> None:
+    def _write_json(path: Path, data: dict[str, Any]) -> None:
         text: str = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
         path.write_text(f"{text}\n", encoding=ENCODING)
 
