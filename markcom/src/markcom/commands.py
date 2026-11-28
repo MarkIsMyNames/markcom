@@ -44,12 +44,9 @@ class BackgroundProcess(AbstractContextManager[None]):
 
 
 class CommandRunner(ABC):
+    # stdin_text: for prompts such as sdkmanager --licenses; None leaves stdin as the caller's
     @abstractmethod
-    def run(self, args: Sequence[str]) -> None: ...
-
-    # prompts such as sdkmanager --licenses wait for "y" on stdin
-    @abstractmethod
-    def run_with_input(self, args: Sequence[str], stdin_text: str) -> None: ...
+    def run(self, args: Sequence[str], stdin_text: str | None = None) -> None: ...
 
     # never raises on non-zero: exit code is the answer (is this installed?)
     @abstractmethod
@@ -69,12 +66,11 @@ class SubprocessRunner(CommandRunner):
         self._environment: dict[str, str] = dict(environment)
 
     @override
-    def run(self, args: Sequence[str]) -> None:
-        self._run_checked(args, None)
-
-    @override
-    def run_with_input(self, args: Sequence[str], stdin_text: str) -> None:
-        self._run_checked(args, stdin_text)
+    def run(self, args: Sequence[str], stdin_text: str | None = None) -> None:
+        self._check_allowed(args)
+        logger.info("Running %s", args[0])
+        subprocess.run(args, input=stdin_text, env=self._environment, text=True, check=True)
+        logger.info("Finished %s", args[0])
 
     @override
     def capture(self, args: Sequence[str]) -> subprocess.CompletedProcess[str]:
@@ -92,13 +88,6 @@ class SubprocessRunner(CommandRunner):
     ) -> AbstractContextManager[None]:
         self._check_allowed(args)
         return BackgroundProcess(args, self._environment, stop_timeout)
-
-    def _run_checked(self, args: Sequence[str], stdin_text: str | None) -> None:
-        self._check_allowed(args)
-        logger.info("Running %s", args[0])
-        # input None leaves stdin as the caller's
-        subprocess.run(args, input=stdin_text, env=self._environment, text=True, check=True)
-        logger.info("Finished %s", args[0])
 
     def _check_allowed(self, args: Sequence[str]) -> None:
         if args[0] not in self._programs:

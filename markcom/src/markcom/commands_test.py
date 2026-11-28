@@ -57,7 +57,7 @@ def run_args(runner: CommandRunner, args: list[str]) -> None:
 
 
 def run_args_with_input(runner: CommandRunner, args: list[str]) -> None:
-    runner.run_with_input(args, "y\n")
+    runner.run(args, "y\n")
 
 
 def capture_args(runner: CommandRunner, args: list[str]) -> None:
@@ -109,9 +109,9 @@ def test_the_child_gets_only_the_given_environment(runner: CommandRunner) -> Non
     assert runner.capture([PYTHON, "-c", script]).stdout == "['MARKCOM_TEST', 'PATH']\n"
 
 
-def test_run_with_input_passes_stdin_text(runner: CommandRunner) -> None:
+def test_run_passes_stdin_text(runner: CommandRunner) -> None:
     script: str = "import sys; exit(0 if sys.stdin.read() == 'y\\n' else 1)"
-    assert runner.run_with_input([PYTHON, "-c", script], "y\n") is None
+    assert runner.run([PYTHON, "-c", script], "y\n") is None
 
 
 def test_background_stops_process_on_exit(runner: CommandRunner, pid_fifo: Path) -> None:
