@@ -1,6 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-/** Runs under Playwright, not Vitest, so coverage excludes it. */
 type StoryEntry = { id: string; type: string };
 type StoryIndex = { entries: Record<string, StoryEntry> };
 

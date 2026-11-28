@@ -2,7 +2,7 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
 
 import { APP_URL, STORYBOOK_URL } from './config.js';
 
-export { testStoryScreenshots } from './story-screenshots.ts';
+export { testStoryScreenshots } from './story-screenshots.js';
 
 const SERVER_TIMEOUT_MS: number = 120_000;
 

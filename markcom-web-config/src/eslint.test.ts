@@ -10,8 +10,8 @@ async function ruleIds(code: string, file: string): Promise<(string | null)[]> {
     overrideConfigFile: true,
     overrideConfig: createEslintConfig({ tsconfigRootDir: ROOT }),
   });
-  const [result] = await eslint.lintText(code, { filePath: `${ROOT}${file}` });
-  return result?.messages.map((m) => m.ruleId) ?? [];
+  const results: ESLint.LintResult[] = await eslint.lintText(code, { filePath: `${ROOT}${file}` });
+  return results.flatMap((result) => result.messages.map((message) => message.ruleId));
 }
 
 describe('createEslintConfig', () => {
