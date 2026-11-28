@@ -8,13 +8,12 @@ from pathlib import Path
 from traceback import format_exception_only
 from typing import Self, override
 
-from desktop_notifier import Urgency
 from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from markcom.config import CONFIG
-from markcom.notifier import NEVER_EXPIRES_SEC, NOTIFIER_THREAD, Notifier
+from markcom.notifier import NEVER_EXPIRES_SEC, NOTIFIER_THREAD, Notifier, Urgency
 
 logger: logging.Logger = logging.getLogger(__name__)
 

@@ -5,15 +5,14 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import override
 
-import desktop_notifier
 import pytest
-from desktop_notifier import Urgency
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+from markcom import notifier
 from markcom.config import CONFIG
-from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
+from markcom.notifier import NEVER_EXPIRES_SEC, FreedesktopNotifier, Urgency
 from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
 
 # Qt draws off screen; no display needed.
@@ -316,19 +315,19 @@ def test_a_failing_notifier_does_not_break_the_apps_logging(make_tray):
     app_log.error("down")
 
 
-class LoggingLibrary:
+class LoggingBus:
     """Logs ERROR on own thread while sending, as library internals may."""
 
-    def __call__(self, **_):
+    async def connect(self):
         return self
 
-    async def send(self, **_):
+    async def call(self, _message):
         logging.getLogger("library").error("internal")
 
 
 def test_an_error_logged_while_a_notification_is_sent_does_not_hang_the_app(make_tray, monkeypatch):
-    monkeypatch.setattr(desktop_notifier, "DesktopNotifier", LoggingLibrary())
-    make_tray(notifier=DesktopNotifier("App", Path("app.png")))
+    monkeypatch.setattr(notifier, "MessageBus", LoggingBus)
+    make_tray(notifier=FreedesktopNotifier("App", Path("app.png"), "org.example.App"))
     logging_call = threading.Thread(target=app_log.error, args=("down",), daemon=True)
     logging_call.start()
     logging_call.join(WAIT_SEC)

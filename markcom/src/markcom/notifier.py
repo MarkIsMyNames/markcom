@@ -3,13 +3,12 @@ import logging
 import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
+from enum import Enum
 from pathlib import Path
 from typing import override
 
-import desktop_notifier
 from dbus_fast import Message, MessageType, Variant
 from dbus_fast.aio import MessageBus
-from desktop_notifier import Icon, Urgency
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -27,7 +26,13 @@ MS_PER_SEC: int = 1000
 URGENCY_HINT: str = "urgency"
 # KDE Plasma keeps an expired notification in its history only with this hint
 DESKTOP_ENTRY_HINT: str = "desktop-entry"
-URGENCY_BYTES: dict[Urgency, int] = {Urgency.Low: 0, Urgency.Normal: 1, Urgency.Critical: 2}
+
+
+class Urgency(Enum):
+    # values: freedesktop's urgency byte
+    Low = 0
+    Normal = 1
+    Critical = 2
 
 
 def _log_failure[T](sent: Future[T]) -> None:
@@ -45,26 +50,6 @@ class Notifier(ABC):
 
     @abstractmethod
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None: ...
-
-
-class DesktopNotifier(Notifier):
-    """macOS and Windows; on Linux, FreedesktopNotifier keeps KDE Plasma's history."""
-
-    def __init__(self, app_name: str, icon: Path) -> None:
-        super().__init__()
-        # relative icon path fails every send
-        self._notifier: desktop_notifier.DesktopNotifier = desktop_notifier.DesktopNotifier(
-            app_name=app_name, app_icon=Icon(path=icon.resolve())
-        )
-        logger.info("desktop notifications for %r", app_name)
-
-    @override
-    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
-        logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
-        asyncio.run_coroutine_threadsafe(
-            self._notifier.send(title=title, message=message, urgency=urgency, timeout=display_sec),
-            self._loop,
-        ).add_done_callback(_log_failure)
 
 
 class FreedesktopNotifier(Notifier):
@@ -90,7 +75,7 @@ class FreedesktopNotifier(Notifier):
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
         hints: dict[str, Variant] = {
-            URGENCY_HINT: Variant("y", URGENCY_BYTES[urgency]),
+            URGENCY_HINT: Variant("y", urgency.value),
             DESKTOP_ENTRY_HINT: Variant("s", self._desktop_entry),
         }
         notify: Message = Message(
@@ -116,7 +101,7 @@ class FreedesktopNotifier(Notifier):
 
     async def _call(self, notify: Message) -> None:
         reply: Message | None = await self._bus.call(notify)
-        # best effort, as desktop-notifier: a refused send is logged, never raised
+        # best effort: a refused send is logged, never raised
         if reply is not None and reply.message_type is MessageType.ERROR:
             logger.warning(
                 "the desktop refused a notification: %s %s", reply.error_name, reply.body

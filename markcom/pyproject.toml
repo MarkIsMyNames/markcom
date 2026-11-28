@@ -12,7 +12,6 @@ dependencies = [
 # no Qt, so notification-only apps stay small
 desktop = [
     "dbus-fast>=5.2",
-    "desktop-notifier>=6.2",
 ]
 # every tray app has a window
 window = [
@@ -60,11 +59,7 @@ addopts = "--strict-markers --strict-config --cov=markcom --cov-report=term-miss
 asyncio_mode = "auto"
 qt_api = "pyside6"
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = [
-    "error",
-    # desktop-notifier 6.2.0 (the latest) calls an asyncio API Python 3.14 deprecates; not our code.
-    "ignore:'asyncio.DefaultEventLoopPolicy' is deprecated:DeprecationWarning:desktop_notifier.main",
-]
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 omit = ["*_test.py"]
