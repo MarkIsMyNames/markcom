@@ -1,4 +1,4 @@
-# A push with GITHUB_TOKEN starts no workflows, so this starts `workflows` itself.
+# push with GITHUB_TOKEN starts no workflows, so this starts `workflows` itself
 name: Visual baselines
 
 on:
@@ -17,7 +17,7 @@ env:
   SNAPSHOTS_DIR: visual/__snapshots__
 
 jobs:
-  # The project's npm dependencies run here, with a read-only token.
+  # project's npm dependencies run here, with read-only token
   screenshots:
     runs-on: ubuntu-latest
     permissions:
@@ -33,7 +33,7 @@ jobs:
       - id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # The branch's newest commit, not the one it had when the run was queued.
+          # branch's newest commit, not the one when run was queued
           ref: ${{ github.ref_name }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -45,7 +45,7 @@ jobs:
       - name: Start from main's baselines
         run: |
           git fetch --depth=1 origin main
-          # Only baselines both have, so one the branch deleted or renamed stays gone.
+          # only baselines both have, so one branch deleted or renamed stays gone
           git diff-tree -r -z --name-only --diff-filter=M HEAD FETCH_HEAD -- "$SNAPSHOTS_DIR" |
             xargs -0 -r git checkout FETCH_HEAD --
       - run: npm run test:visual:update
@@ -56,7 +56,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # This job can push and start workflows, so it runs none of the project's code.
+  # can push and start workflows, so runs none of project's code
   commit:
     needs: screenshots
     runs-on: ubuntu-latest
@@ -82,7 +82,7 @@ jobs:
           changed=$(git diff --staged --name-only | sed 's/^/- /')
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -q -m "test(visual): update baselines"
-          # Fails if the branch has moved since the screenshots' commit.
+          # fails if branch moved since screenshots' commit
           git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           printf 'Commit: %s\n\nChanged images:\n%s\n' "$(git rev-parse HEAD)" "$changed" | tee -a "$GITHUB_STEP_SUMMARY"

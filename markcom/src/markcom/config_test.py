@@ -71,6 +71,13 @@ def test_config_is_immutable(tmp_path):
         config.workers = 8
 
 
+def test_markcom_config_without_its_ui_server_section_is_rejected(tmp_path):
+    content = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    del content["ui_server"]
+    with pytest.raises(ConfigError):
+        load_config(write(tmp_path, content), MarkcomConfig)
+
+
 class FormatConfig(StrictModel):
     log_format: LogFormat
 
@@ -86,10 +93,3 @@ def test_accepts_a_valid_log_format(tmp_path):
 def test_rejects_an_invalid_log_format(tmp_path, log_format):
     with pytest.raises(ConfigError):
         load_config(write(tmp_path, {"log_format": log_format}), FormatConfig)
-
-
-def test_markcom_config_without_its_ui_server_section_is_rejected(tmp_path):
-    content = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    del content["ui_server"]
-    with pytest.raises(ConfigError):
-        load_config(write(tmp_path, content), MarkcomConfig)

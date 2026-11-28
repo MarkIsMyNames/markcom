@@ -17,14 +17,14 @@ def run[TConfig: BaseAppConfig, TSecrets: BaseSecrets, TResult](
     config_model: type[TConfig],
     secrets_model: type[TSecrets],
 ) -> TResult:
-    """Entry point: config and secrets, then logging, then main. Exits non-zero on any failure."""
     try:
         config: TConfig = load_config(config_path, config_model)
         secrets: TSecrets = load_secrets(secrets_model, config_path.parent)
     except ConfigError as error:
-        # Logging is not configured yet, so the error goes straight to stderr.
+        # logging not configured yet
         sys.stderr.write(f"Configuration error: {error}\n")
         raise SystemExit(os.EX_CONFIG) from error
+    # config sets the level, so logging comes after it
     configure_logging(config.log_level)
     # variable names only, never values
     logger.info(

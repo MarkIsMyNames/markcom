@@ -13,8 +13,6 @@ class ExampleSecrets(BaseSecrets):
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    """Clears the environment, then sets the given variables and writes .env into the folder it
-    returns."""
     monkeypatch.delenv("API_TOKEN", raising=False)
     monkeypatch.delenv("PORT", raising=False)
 
@@ -62,8 +60,6 @@ def test_no_secrets_needs_no_variables_and_ignores_dotenv(setup, dotenv):
 
 
 class RootDotenvSecrets(ExampleSecrets):
-    """A tool in a subfolder sharing the repository root's .env."""
-
     model_config = SettingsConfigDict(env_file="../.env")
 
 

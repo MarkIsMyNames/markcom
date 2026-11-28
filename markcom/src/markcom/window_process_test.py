@@ -2,28 +2,34 @@ import os
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from typing import override
+from typing import NamedTuple, override
 
 import pytest
-from pydantic import HttpUrl
-from PySide6.QtCore import QDeadlineTimer, QEvent, QEventLoop, QObject, QSettings, QSize, QUrl, Slot
+from PySide6.QtCore import QEvent, QObject, QSettings, QSize, QUrl, Slot
 from PySide6.QtGui import QColor, QDesktopServices, QImage, QPalette
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication
 
 from markcom.config import CONFIG
+from markcom.own_origin import LOOPBACK
 from markcom.window_messages import WindowSpec
 from markcom.window_process import OwnOriginWindow
 
-# no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
-# pages.
+# Qt draws off screen; no display. CI blocks Chromium sandbox; tests load only own pages.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
+# offscreen has no GL: Chromium's GPU code crashes (SIGTRAP) soon after a page draws
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
 
-WAIT_MS = 5000
 QUIET_MS = 500
-PUMP_MS = 50
+ANY_FREE_PORT = 0
+CLOSED_PORT = 9  # discard port: nothing listens
+ICON_PX = 64
+
+
+class Site(NamedTuple):
+    url: str
+    requests: list
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -42,9 +48,12 @@ class RecordingHandler(QuietHandler):
 
 
 def serve(folder, handler):
-    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(handler, directory=str(folder)))
+    server = ThreadingHTTPServer(
+        (str(LOOPBACK), ANY_FREE_PORT), partial(handler, directory=str(folder))
+    )
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server, f"http://127.0.0.1:{server.server_address[1]}"
+    _, port = server.server_address
+    return server, f"http://{LOOPBACK}:{port}"
 
 
 @pytest.fixture(scope="module")
@@ -58,7 +67,7 @@ def other_site(tmp_path_factory):
 
     Handler.requests = requests
     server, base = serve(folder, Handler)
-    yield base, requests
+    yield Site(base, requests)
     server.shutdown()
     server.server_close()
 
@@ -77,7 +86,7 @@ def site(tmp_path_factory, other_site):
     (folder / "index.html").write_text(f"<title>Home</title>{links}", encoding="utf-8")
     (folder / "two.html").write_text("<title>Two</title>", encoding="utf-8")
     (folder / "frame.html").write_text(
-        f'<title>Frame</title><iframe src="{other_site[0]}/inner.html"></iframe>',
+        f'<title>Frame</title><iframe src="{other_site.url}/inner.html"></iframe>',
         encoding="utf-8",
     )
     server, base = serve(folder, QuietHandler)
@@ -87,7 +96,8 @@ def site(tmp_path_factory, other_site):
 
 
 @pytest.fixture(scope="module")
-def qt_app():
+def qapp():
+    """Module-scoped: tray tests build own QApplication."""
     app = QApplication(["window-process-test"])
     yield app
     app.shutdown()
@@ -105,7 +115,7 @@ class Browser(QObject):
 
 @pytest.fixture
 def browser(request):
-    request.getfixturevalue("qt_app")
+    request.getfixturevalue("qapp")
     recorder = Browser()
     schemes = ("https", "mailto", "smb")
     for scheme in schemes:
@@ -118,14 +128,20 @@ def browser(request):
 @pytest.fixture
 def icon(tmp_path):
     path = tmp_path / "icon.png"
-    image = QImage(64, 64, QImage.Format.Format_ARGB32)
+    image = QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
     image.save(str(path))
     return path
 
 
 def spec_for(url, icon):
-    return WindowSpec(title="App", url=HttpUrl(url), icon=Path(icon))
+    return WindowSpec(
+        title="App",
+        url=url,
+        icon=str(icon),
+        width=CONFIG.window.width,
+        height=CONFIG.window.height,
+    )
 
 
 @pytest.fixture
@@ -135,29 +151,20 @@ def settings(tmp_path):
 
 @pytest.fixture
 def make_window(request, site, icon, settings):
-    request.getfixturevalue("qt_app")
+    request.getfixturevalue("qapp")
     windows = []
 
-    def make(page="index.html"):
-        window = OwnOriginWindow(spec_for(f"{site}/{page}", icon), settings)
+    def make(page="index.html", base=site):
+        window = OwnOriginWindow(spec_for(f"{base}/{page}", icon), settings)
         windows.append(window)
         return window
 
     yield make
-    # deleted now, while their QApplication lives: QtWebEngine aborts on a page deleted after it
+    # Delete while QApplication lives: QtWebEngine aborts on page deleted after it.
     for window in windows:
         window.close()
         window.deleteLater()
     QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-
-
-def wait_until(predicate, deadline_ms=WAIT_MS):
-    deadline = QDeadlineTimer(deadline_ms)
-    while not predicate():
-        if deadline.hasExpired():
-            return False
-        QApplication.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, PUMP_MS)
-    return True
 
 
 def view(window) -> QWebEngineView:
@@ -168,28 +175,38 @@ def click(window, link_id):
     view(window).page().runJavaScript(f"document.getElementById('{link_id}').click()")
 
 
-def shown_home(make_window):
+def shown_home(make_window, qtbot):
     window = make_window()
-    window.show()
-    assert wait_until(lambda: view(window).title() == "Home")
+    qtbot.waitUntil(lambda: view(window).title() == "Home")
     return window
 
 
-def test_the_window_shows_the_page_under_the_title(make_window):
+def test_the_window_shows_the_page_under_the_title(make_window, qtbot):
     window = make_window()
-    window.show()
     assert window.windowTitle() == "App"
-    assert wait_until(lambda: view(window).title() == "Home")
+    qtbot.waitUntil(lambda: view(window).title() == "Home")
+
+
+def test_the_window_stays_hidden_until_its_page_loads(make_window, qtbot):
+    window = make_window()
+    assert not window.isVisible()
+    qtbot.waitUntil(window.isVisible)
+    assert view(window).title() == "Home"
+
+
+def test_a_page_that_fails_to_load_still_shows_the_window(make_window, qtbot):
+    window = make_window(base=f"http://{LOOPBACK}:{CLOSED_PORT}")
+    qtbot.waitUntil(window.isVisible)
 
 
 @pytest.fixture
-def dark_theme(qt_app):
-    theme = qt_app.palette()
+def dark_theme(qapp):
+    theme = qapp.palette()
     dark = QPalette(theme)
     dark.setColor(QPalette.ColorRole.Base, QColor("#141618"))
-    qt_app.setPalette(dark)
+    qapp.setPalette(dark)
     yield
-    qt_app.setPalette(theme)
+    qapp.setPalette(theme)
 
 
 @pytest.mark.usefixtures("dark_theme")
@@ -223,44 +240,44 @@ def test_a_window_closed_maximised_comes_back_maximised(make_window):
     assert second.isMaximized()
 
 
-def test_a_same_origin_link_loads_in_the_window(make_window, browser):
-    window = shown_home(make_window)
+def test_a_same_origin_link_loads_in_the_window(make_window, browser, qtbot):
+    window = shown_home(make_window, qtbot)
     click(window, "same")
-    assert wait_until(lambda: view(window).title() == "Two")
+    qtbot.waitUntil(lambda: view(window).title() == "Two")
     assert browser.urls == []
 
 
-def test_another_origin_opens_in_the_browser_not_the_window(make_window, browser):
-    window = shown_home(make_window)
+def test_another_origin_opens_in_the_browser_not_the_window(make_window, browser, qtbot):
+    window = shown_home(make_window, qtbot)
     click(window, "other")
-    assert wait_until(lambda: browser.urls == ["https://example.org/x"])
+    qtbot.waitUntil(lambda: browser.urls == ["https://example.org/x"])
     assert view(window).title() == "Home"
 
 
-def test_a_new_window_link_to_another_origin_opens_in_the_browser(make_window, browser):
-    window = shown_home(make_window)
+def test_a_new_window_link_to_another_origin_opens_in_the_browser(make_window, browser, qtbot):
+    window = shown_home(make_window, qtbot)
     click(window, "other-new")
-    assert wait_until(lambda: browser.urls == ["https://example.org/new"])
+    qtbot.waitUntil(lambda: browser.urls == ["https://example.org/new"])
     assert view(window).title() == "Home"
 
 
-def test_a_same_origin_new_window_link_loads_in_the_window(make_window, browser):
-    window = shown_home(make_window)
+def test_a_same_origin_new_window_link_loads_in_the_window(make_window, browser, qtbot):
+    window = shown_home(make_window, qtbot)
     click(window, "same-new")
-    assert wait_until(lambda: view(window).title() == "Two")
+    qtbot.waitUntil(lambda: view(window).title() == "Two")
     assert browser.urls == []
 
 
 @pytest.mark.parametrize("link_id", ["mail", "smb"])
-def test_non_web_links_neither_load_nor_reach_the_desktop(make_window, browser, link_id):
-    window = shown_home(make_window)
+def test_non_web_links_neither_load_nor_reach_the_desktop(make_window, browser, link_id, qtbot):
+    window = shown_home(make_window, qtbot)
     click(window, link_id)
-    wait_until(lambda: False, QUIET_MS)
+    qtbot.wait(QUIET_MS)
     assert browser.urls == []
     assert view(window).title() == "Home"
 
 
-def test_another_origin_in_an_iframe_loads_in_the_page(make_window, browser, other_site):
-    make_window("frame.html").show()
-    assert wait_until(lambda: "/inner.html" in other_site[1])
+def test_another_origin_in_an_iframe_loads_in_the_page(make_window, browser, other_site, qtbot):
+    make_window("frame.html")
+    qtbot.waitUntil(lambda: "/inner.html" in other_site.requests)
     assert browser.urls == []
