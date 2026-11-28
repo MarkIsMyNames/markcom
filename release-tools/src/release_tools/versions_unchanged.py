@@ -4,13 +4,13 @@ import os
 from pathlib import Path
 
 from git import Repo
-from markcom.config import ConfigError, load_config
+from markcom.config import ConfigError
 from markcom.runner import run
 from markcom.secrets import NoSecrets
 from semver import Version
 
-from release_tools.config import CONFIG_PATH, Labels, ReleaseConfig, ToolConfig
-from release_tools.libraries import HEAD, REMOTE_MAIN, Library, VersionError, libraries_in
+from release_tools.config import CONFIG_PATH, Labels, ToolConfig
+from release_tools.libraries import HEAD, REMOTE_MAIN, Library, VersionError, load_libraries
 from release_tools.report import error, say
 
 
@@ -40,10 +40,7 @@ def _check_all(config: ToolConfig, _secrets: NoSecrets) -> bool:
     repo: Repo = Repo(search_parent_directories=True)
     # a pull request's merge commit or a branch head alike: where it left main
     base: str = repo.git.merge_base(HEAD, REMOTE_MAIN)
-    release: ReleaseConfig = load_config(
-        Path(repo.working_dir) / config.release_config, ReleaseConfig
-    )
-    libraries: tuple[Library, ...] = libraries_in(release)
+    libraries: tuple[Library, ...] = load_libraries(Path(repo.working_dir), config.release_config)
     # a list, not all() on a generator: every library is reported, not just the first failure
     results: list[bool] = [_check(repo, library, config.labels, base) for library in libraries]
     return all(results)
