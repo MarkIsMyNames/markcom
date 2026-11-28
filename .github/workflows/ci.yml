@@ -11,7 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        library: [markcom, release-tools]
+        include:
+          - library: markcom
+            has_e2e: true
+          - library: release-tools
+            has_e2e: false
     defaults:
       run:
         working-directory: ${{ matrix.library }}
@@ -39,7 +43,7 @@ jobs:
         run: uv run pytest -q
       # private session bus, so fake service can own org.freedesktop.Notifications
       - name: End-to-end tests
-        if: hashFiles(format('{0}/e2e/**', matrix.library)) != ''
+        if: matrix.has_e2e
         run: dbus-run-session -- uv run pytest e2e --no-cov -q
 
   versions-unchanged:

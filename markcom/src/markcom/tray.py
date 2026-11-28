@@ -53,7 +53,7 @@ class _RecordNotifications(logging.Handler):
 
     @override
     def filter(self, record: logging.LogRecord) -> bool | logging.LogRecord:
-        # notifier thread logs while a send waits holding this lock: sending it deadlocks
+        # notifier thread logs a failed send: notifying that would fail and log again, endlessly
         return record.threadName != NOTIFIER_THREAD and super().filter(record)
 
     @override

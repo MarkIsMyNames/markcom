@@ -2,7 +2,7 @@ import asyncio
 import logging
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Coroutine
+from concurrent.futures import Future
 from pathlib import Path
 from typing import override
 
@@ -30,6 +30,13 @@ DESKTOP_ENTRY_HINT: str = "desktop-entry"
 URGENCY_BYTES: dict[Urgency, int] = {Urgency.Low: 0, Urgency.Normal: 1, Urgency.Critical: 2}
 
 
+def _log_failure[T](sent: Future[T]) -> None:
+    # fire and forget, so only this sees a failed send
+    failure: BaseException | None = sent.exception()
+    if failure is not None:
+        logger.error("a notification failed", exc_info=failure)
+
+
 class Notifier(ABC):
     def __init__(self) -> None:
         # D-Bus connection stays bound to the loop that opened it; daemon so exit never waits
@@ -38,10 +45,6 @@ class Notifier(ABC):
 
     @abstractmethod
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None: ...
-
-    def _wait_for[T](self, coroutine: Coroutine[None, None, T]) -> T:
-        # blocks until desktop has it, so a log record just before exit still shows
-        return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result()
 
 
 class DesktopNotifier(Notifier):
@@ -58,9 +61,10 @@ class DesktopNotifier(Notifier):
     @override
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
-        self._wait_for(
-            self._notifier.send(title=title, message=message, urgency=urgency, timeout=display_sec)
-        )
+        asyncio.run_coroutine_threadsafe(
+            self._notifier.send(title=title, message=message, urgency=urgency, timeout=display_sec),
+            self._loop,
+        ).add_done_callback(_log_failure)
 
 
 class FreedesktopNotifier(Notifier):
@@ -71,7 +75,10 @@ class FreedesktopNotifier(Notifier):
         self._app_name: str = app_name
         self._icon: str = icon.resolve().as_uri()
         self._desktop_entry: str = desktop_entry
-        self._bus: MessageBus = self._wait_for(self._connect())
+        # blocks: a send must find the bus connected
+        self._bus: MessageBus = asyncio.run_coroutine_threadsafe(
+            self._connect(), self._loop
+        ).result()
         logger.info("freedesktop notifications for %r as %s", app_name, desktop_entry)
 
     @staticmethod
@@ -103,7 +110,12 @@ class FreedesktopNotifier(Notifier):
                 display_sec * MS_PER_SEC,
             ],
         )
-        reply: Message | None = self._wait_for(self._bus.call(notify))
+        asyncio.run_coroutine_threadsafe(self._call(notify), self._loop).add_done_callback(
+            _log_failure
+        )
+
+    async def _call(self, notify: Message) -> None:
+        reply: Message | None = await self._bus.call(notify)
         # best effort, as desktop-notifier: a refused send is logged, never raised
         if reply is not None and reply.message_type is MessageType.ERROR:
             logger.warning(
