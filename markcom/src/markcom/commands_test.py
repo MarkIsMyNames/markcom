@@ -1,5 +1,6 @@
 import os
 import select
+import subprocess
 import sys
 from collections.abc import Callable
 from datetime import timedelta
@@ -7,14 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from markcom.commands import (
-    CommandFailedError,
-    CommandNotAllowedError,
-    CommandNotFoundError,
-    CommandResult,
-    CommandRunner,
-    SubprocessRunner,
-)
+from markcom.commands import CommandRunner, SubprocessRunner
 
 PYTHON: str = sys.executable
 MISSING: str = "markcom-no-such-command"
@@ -84,20 +78,21 @@ def test_run_success_returns_none(runner: CommandRunner) -> None:
 def test_run_nonzero_raises_failed_with_returncode(
     runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None], returncode: int
 ) -> None:
-    with pytest.raises(CommandFailedError):
+    with pytest.raises(subprocess.CalledProcessError):
         start(runner, [PYTHON, "-c", f"exit({returncode})"])
 
 
 def test_capture_nonzero_returns_result_no_raise(runner: CommandRunner) -> None:
     script: str = "import sys; print('out'); print('err', file=sys.stderr); exit(2)"
-    assert runner.capture([PYTHON, "-c", script]) == CommandResult(returncode=2, stdout="out\n")
+    completed = runner.capture([PYTHON, "-c", script])
+    assert (completed.returncode, completed.stdout) == (2, "out\n")
 
 
 @pytest.mark.parametrize("start", [run_args, run_args_with_input, capture_args, enter_background])
 def test_missing_command_raises_not_found(
     runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None]
 ) -> None:
-    with pytest.raises(CommandNotFoundError):
+    with pytest.raises(FileNotFoundError):
         start(runner, [MISSING])
 
 
@@ -105,7 +100,7 @@ def test_missing_command_raises_not_found(
 def test_a_program_not_allowed_is_refused(
     runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None]
 ) -> None:
-    with pytest.raises(CommandNotAllowedError):
+    with pytest.raises(PermissionError):
         start(runner, ["true"])
 
 
