@@ -18,66 +18,30 @@ PATH_VARIABLE: str = "PATH"
 class CommandError(Exception): ...
 
 
-class CommandNotFoundError(CommandError):
-    def __init__(self, command: str) -> None:
-        super().__init__(f"{command} is not installed or not on PATH")
-        self._command: str = command
-
-    @property
-    def command(self) -> str:
-        return self._command
+class CommandNotAllowedError(CommandError): ...
 
 
-class CommandNotAllowedError(CommandError):
-    def __init__(self, command: str) -> None:
-        super().__init__(f"{command} is not one of the programs this runner may start")
-        self._command: str = command
-
-    @property
-    def command(self) -> str:
-        return self._command
+class CommandNotFoundError(CommandError): ...
 
 
-class CommandFailedError(CommandError):
-    def __init__(self, command: str, returncode: int) -> None:
-        super().__init__(f"{command} failed with exit code {returncode}")
-        self._command: str = command
-        self._returncode: int = returncode
-
-    @property
-    def command(self) -> str:
-        return self._command
-
-    @property
-    def returncode(self) -> int:
-        return self._returncode
+class CommandFailedError(CommandError): ...
 
 
 @dataclass(frozen=True)
 class CommandResult:
     returncode: int
     stdout: str
-    stderr: str
 
 
 class BackgroundProcess(AbstractContextManager[None]):
     def __init__(
         self, command: list[str], environment: Mapping[str, str], stop_timeout: timedelta
     ) -> None:
-        self._command: list[str] = command
-        self._environment: dict[str, str] = dict(environment)
         self._name: str = command[0]
-        self._stop_timeout: timedelta = stop_timeout
-        self._process: subprocess.Popen[bytes] | None = None
-
-    @override
-    def __enter__(self) -> None:
         logger.info("Starting %s in the background", self._name)
-        self._process = subprocess.Popen(
-            self._command,
-            env=self._environment,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        self._stop_timeout: timedelta = stop_timeout
+        self._process: subprocess.Popen[bytes] = subprocess.Popen(
+            command, env=dict(environment), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
 
     @override
@@ -87,8 +51,6 @@ class BackgroundProcess(AbstractContextManager[None]):
         _error: BaseException | None,
         _traceback: TracebackType | None,
     ) -> None:
-        if self._process is None:
-            return
         with self._process as process:
             process.terminate()
             try:
@@ -144,9 +106,7 @@ class SubprocessRunner(CommandRunner):
             command, env=self._environment, capture_output=True, text=True, check=False
         )
         logger.debug("%s exited with %d", args[0], completed.returncode)
-        return CommandResult(
-            returncode=completed.returncode, stdout=completed.stdout, stderr=completed.stderr
-        )
+        return CommandResult(returncode=completed.returncode, stdout=completed.stdout)
 
     @override
     def run_in_background(
@@ -162,14 +122,17 @@ class SubprocessRunner(CommandRunner):
             command, input=stdin_text, env=self._environment, text=True, check=False
         )
         if completed.returncode != os.EX_OK:
-            raise CommandFailedError(args[0], completed.returncode)
+            failed: str = f"{args[0]} failed with exit code {completed.returncode}"
+            raise CommandFailedError(failed)
         logger.info("Finished %s", args[0])
 
     def _resolve(self, args: Sequence[str]) -> list[str]:
         if args[0] not in self._programs:
-            raise CommandNotAllowedError(args[0])
+            not_allowed: str = f"{args[0]} is not one of the programs this runner may start"
+            raise CommandNotAllowedError(not_allowed)
         # the given PATH, not the parent's: whoever sets PATH picks the binary
         executable: str | None = shutil.which(args[0], path=self._environment[PATH_VARIABLE])
         if executable is None:
-            raise CommandNotFoundError(args[0])
+            missing: str = f"{args[0]} is not installed or not on PATH"
+            raise CommandNotFoundError(missing)
         return [executable, *args[1:]]
