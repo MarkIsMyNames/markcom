@@ -44,13 +44,11 @@ class BackgroundProcess(AbstractContextManager[None]):
 
 
 class CommandRunner(ABC):
-    # stdin_text: for prompts such as sdkmanager --licenses; None leaves stdin as the caller's
+    # never raises: caller reads returncode or calls check_returncode()
     @abstractmethod
-    def run(self, args: Sequence[str], stdin_text: str | None = None) -> None: ...
-
-    # never raises on non-zero: exit code is the answer (is this installed?)
-    @abstractmethod
-    def capture(self, args: Sequence[str]) -> subprocess.CompletedProcess[str]: ...
+    def run(
+        self, args: Sequence[str], stdin_text: str | None = None
+    ) -> subprocess.CompletedProcess[str]: ...
 
     # terminated on leaving the with block, killed after stop_timeout
     @abstractmethod
@@ -66,20 +64,20 @@ class SubprocessRunner(CommandRunner):
         self._environment: dict[str, str] = dict(environment)
 
     @override
-    def run(self, args: Sequence[str], stdin_text: str | None = None) -> None:
+    def run(
+        self, args: Sequence[str], stdin_text: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         self._check_allowed(args)
         logger.info("Running %s", args[0])
-        subprocess.run(args, input=stdin_text, env=self._environment, text=True, check=True)
-        logger.info("Finished %s", args[0])
-
-    @override
-    def capture(self, args: Sequence[str]) -> subprocess.CompletedProcess[str]:
-        self._check_allowed(args)
-        logger.debug("Capturing %s", args[0])
         completed: subprocess.CompletedProcess[str] = subprocess.run(
-            args, env=self._environment, capture_output=True, text=True, check=False
+            args,
+            input=stdin_text,
+            env=self._environment,
+            capture_output=True,
+            text=True,
+            check=False,
         )
-        logger.debug("%s exited with %d", args[0], completed.returncode)
+        logger.info("%s exited with %d", args[0], completed.returncode)
         return completed
 
     @override

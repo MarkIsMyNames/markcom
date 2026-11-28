@@ -1,6 +1,5 @@
 import os
 import select
-import subprocess
 import sys
 from collections.abc import Callable
 from datetime import timedelta
@@ -56,39 +55,25 @@ def run_args(runner: CommandRunner, args: list[str]) -> None:
     runner.run(args)
 
 
-def run_args_with_input(runner: CommandRunner, args: list[str]) -> None:
-    runner.run(args, "y\n")
-
-
-def capture_args(runner: CommandRunner, args: list[str]) -> None:
-    runner.capture(args)
-
-
 def enter_background(runner: CommandRunner, args: list[str]) -> None:
     with runner.run_in_background(args, STOP_TIMEOUT):
         pass
 
 
-def test_run_success_returns_none(runner: CommandRunner) -> None:
-    assert runner.run([PYTHON, "-c", "pass"]) is None
-
-
-@pytest.mark.parametrize("start", [run_args, run_args_with_input])
-@pytest.mark.parametrize("returncode", [1, 3])
-def test_run_nonzero_raises_failed_with_returncode(
-    runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None], returncode: int
+@pytest.mark.parametrize("returncode", [0, 2])
+def test_run_returns_the_exit_code_and_output_without_raising(
+    runner: CommandRunner, returncode: int
 ) -> None:
-    with pytest.raises(subprocess.CalledProcessError):
-        start(runner, [PYTHON, "-c", f"exit({returncode})"])
+    script: str = f"import sys; print('out'); print('err', file=sys.stderr); exit({returncode})"
+    completed = runner.run([PYTHON, "-c", script])
+    assert (completed.returncode, completed.stdout, completed.stderr) == (
+        returncode,
+        "out\n",
+        "err\n",
+    )
 
 
-def test_capture_nonzero_returns_result_no_raise(runner: CommandRunner) -> None:
-    script: str = "import sys; print('out'); print('err', file=sys.stderr); exit(2)"
-    completed = runner.capture([PYTHON, "-c", script])
-    assert (completed.returncode, completed.stdout) == (2, "out\n")
-
-
-@pytest.mark.parametrize("start", [run_args, run_args_with_input, capture_args, enter_background])
+@pytest.mark.parametrize("start", [run_args, enter_background])
 def test_missing_command_raises_not_found(
     runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None]
 ) -> None:
@@ -96,7 +81,7 @@ def test_missing_command_raises_not_found(
         start(runner, [MISSING])
 
 
-@pytest.mark.parametrize("start", [run_args, run_args_with_input, capture_args, enter_background])
+@pytest.mark.parametrize("start", [run_args, enter_background])
 def test_a_program_not_allowed_is_refused(
     runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None]
 ) -> None:
@@ -106,12 +91,12 @@ def test_a_program_not_allowed_is_refused(
 
 def test_the_child_gets_only_the_given_environment(runner: CommandRunner) -> None:
     script: str = "import os; print(sorted(k for k in os.environ if k != 'LC_CTYPE'))"
-    assert runner.capture([PYTHON, "-c", script]).stdout == "['MARKCOM_TEST', 'PATH']\n"
+    assert runner.run([PYTHON, "-c", script]).stdout == "['MARKCOM_TEST', 'PATH']\n"
 
 
 def test_run_passes_stdin_text(runner: CommandRunner) -> None:
     script: str = "import sys; exit(0 if sys.stdin.read() == 'y\\n' else 1)"
-    assert runner.run([PYTHON, "-c", script], "y\n") is None
+    assert runner.run([PYTHON, "-c", script], "y\n").returncode == 0
 
 
 def test_background_stops_process_on_exit(runner: CommandRunner, pid_fifo: Path) -> None:
