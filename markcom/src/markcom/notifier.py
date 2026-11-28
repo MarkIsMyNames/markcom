@@ -2,6 +2,7 @@ import asyncio
 import logging
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import override
 
@@ -35,17 +36,12 @@ class Notifier(ABC):
         self._loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
         threading.Thread(target=self._loop.run_forever, name=NOTIFIER_THREAD, daemon=True).start()
 
-    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
-        # blocks until desktop has it, so a log record just before exit still shows
-        logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
-        asyncio.run_coroutine_threadsafe(
-            self._deliver(title, message, urgency, display_sec), self._loop
-        ).result()
-
     @abstractmethod
-    async def _deliver(
-        self, title: str, message: str, urgency: Urgency, display_sec: int
-    ) -> None: ...
+    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None: ...
+
+    def _wait_for[T](self, coroutine: Coroutine[None, None, T]) -> T:
+        # blocks until desktop has it, so a log record just before exit still shows
+        return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result()
 
 
 class DesktopNotifier(Notifier):
@@ -60,9 +56,10 @@ class DesktopNotifier(Notifier):
         logger.info("desktop notifications for %r", app_name)
 
     @override
-    async def _deliver(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
-        await self._notifier.send(
-            title=title, message=message, urgency=urgency, timeout=display_sec
+    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
+        logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
+        self._wait_for(
+            self._notifier.send(title=title, message=message, urgency=urgency, timeout=display_sec)
         )
 
 
@@ -74,9 +71,7 @@ class FreedesktopNotifier(Notifier):
         self._app_name: str = app_name
         self._icon: str = icon.resolve().as_uri()
         self._desktop_entry: str = desktop_entry
-        self._bus: MessageBus = asyncio.run_coroutine_threadsafe(
-            self._connect(), self._loop
-        ).result()
+        self._bus: MessageBus = self._wait_for(self._connect())
         logger.info("freedesktop notifications for %r as %s", app_name, desktop_entry)
 
     @staticmethod
@@ -85,30 +80,30 @@ class FreedesktopNotifier(Notifier):
         return await MessageBus().connect()
 
     @override
-    async def _deliver(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
+    def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
+        logger.debug("notifying %r, urgency %s, %d s", title, urgency, display_sec)
         hints: dict[str, Variant] = {
             URGENCY_HINT: Variant("y", URGENCY_BYTES[urgency]),
             DESKTOP_ENTRY_HINT: Variant("s", self._desktop_entry),
         }
-        reply: Message | None = await self._bus.call(
-            Message(
-                destination=NOTIFICATIONS_SERVICE,
-                path=NOTIFICATIONS_PATH,
-                interface=NOTIFICATIONS_SERVICE,
-                member=NOTIFY,
-                signature=NOTIFY_SIGNATURE,
-                body=[
-                    self._app_name,
-                    NEW_NOTIFICATION,
-                    self._icon,
-                    title,
-                    message,
-                    [],
-                    hints,
-                    display_sec * MS_PER_SEC,
-                ],
-            )
+        notify: Message = Message(
+            destination=NOTIFICATIONS_SERVICE,
+            path=NOTIFICATIONS_PATH,
+            interface=NOTIFICATIONS_SERVICE,
+            member=NOTIFY,
+            signature=NOTIFY_SIGNATURE,
+            body=[
+                self._app_name,
+                NEW_NOTIFICATION,
+                self._icon,
+                title,
+                message,
+                [],
+                hints,
+                display_sec * MS_PER_SEC,
+            ],
         )
+        reply: Message | None = self._wait_for(self._bus.call(notify))
         # best effort, as desktop-notifier: a refused send is logged, never raised
         if reply is not None and reply.message_type is MessageType.ERROR:
             logger.warning(

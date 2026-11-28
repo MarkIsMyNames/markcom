@@ -43,7 +43,7 @@ repos:
 
       - id: semgrep
         name: Semgrep
-        entry: semgrep scan --config p/default --config p/secrets --config p/owasp-top-ten --error --quiet
+        entry: semgrep scan --config p/default --config p/owasp-top-ten --config p/github-actions --error --quiet
         language: system
         pass_filenames: false
 
