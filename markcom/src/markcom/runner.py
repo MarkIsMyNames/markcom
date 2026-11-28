@@ -4,7 +4,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from markcom.config import CONFIG, BaseAppConfig, ConfigError, load_config
+from markcom.config import BaseAppConfig, ConfigError, load_config
+from markcom.logs import configure_logging
 from markcom.secrets import BaseSecrets, load_secrets
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ def run[TConfig: BaseAppConfig, TSecrets: BaseSecrets, TResult](
         sys.stderr.write(f"Configuration error: {error}\n")
         raise SystemExit(os.EX_CONFIG) from error
     # config sets the level, so logging comes after it
-    logging.basicConfig(level=config.log_level, format=CONFIG.log_format, force=True)
+    configure_logging(config.log_level)
     # variable names only, never values
     logger.info(
         "Starting the app: configuration from %s, log level %s, environment variables %s",

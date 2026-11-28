@@ -37,6 +37,7 @@ Import each from its module, such as `from markcom.runner import run`: the packa
 | Module | Function or class | Extra | What it does | Example |
 |---|---|---|---|---|
 | `markcom.runner` | `run` | none | Loads `config.json` and the secrets, configures logging at the config's `log_level`, then calls `main(config, secrets)`. A configuration error goes to stderr and exits with `os.EX_CONFIG`. | `run(main, Path("config.json"), AppConfig, AppSecrets)` |
+| `markcom.logs` | `configure_logging` | none | Configures logging at a level, in markcom's log format, replacing any earlier set-up. `run` calls it after loading config. | `configure_logging("INFO")` |
 | `markcom.config` | `BaseAppConfig` | none | Base for an app's `config.json` model, with `log_level`. Every field is required, unknown keys are rejected, and the model is immutable. | `class AppConfig(BaseAppConfig): poll_sec: int` |
 | `markcom.secrets` | `BaseSecrets`, `NoSecrets` | none | Base for secrets: each field is read from its upper-case variable, from the environment first, then from the `.env` beside `config.json`. `NoSecrets` is for an app that reads none; it ignores any `.env`. | `class AppSecrets(BaseSecrets): api_token: SecretStr` |
 | `markcom.notifier` | `DesktopNotifier` | `desktop` | Sends desktop notifications through desktop-notifier, from any thread, and returns once the desktop has each one. A failed send is logged, never raised. Needs no Qt. | `DesktopNotifier("App", icon)` |
