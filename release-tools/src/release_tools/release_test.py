@@ -84,6 +84,7 @@ def test_code_change_gets_the_next_patch_in_a_release_commit(released):
     release = released.origin_main()
     assert release.parents == (pushed,)
     assert release.message.strip() == f"chore(release): markcom {new}"
+    assert release.author.name == release.committer.name == "github-actions[bot]"
     assert released.tagged_commit(f"markcom-v{new}") == release
     assert f'version = "{new}"' in released.file_at_origin_main("markcom/pyproject.toml")
     assert changed_lines(released, pushed, release, "markcom/uv.lock") == [

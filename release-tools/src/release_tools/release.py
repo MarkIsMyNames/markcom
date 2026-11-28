@@ -10,7 +10,6 @@ from semver import Version
 
 from release_tools.config import CONFIG_PATH, Labels, ToolConfig
 from release_tools.libraries import (
-    ENCODING,
     HEAD,
     MAIN,
     REMOTE,
@@ -19,12 +18,14 @@ from release_tools.libraries import (
     VersionError,
     load_libraries,
 )
-from release_tools.report import error, say
+from release_tools.report import error, say, set_output
 
 PUSH_HEAD_TO_MAIN: str = f"{HEAD}:{MAIN}"
 # set by release.yml, one label per line
 LABELS_VARIABLE: str = "RELEASE_LABELS"
-OUTPUT_VARIABLE: str = "GITHUB_OUTPUT"
+GIT_USER: str = "user"
+GIT_NAME: str = "name"
+GIT_EMAIL: str = "email"
 # release.yml reads steps.release.outputs.tags
 TAGS_OUTPUT: str = "tags"
 TAG_SEPARATOR: str = " "
@@ -58,28 +59,25 @@ def _next_version(repo: Repo, library: Library, level: BumpLevel) -> Version | N
     return None
 
 
-def _publish(repo: Repo, releases: list[tuple[Library, Version]], config: ToolConfig) -> None:
+def _publish(repo: Repo, releases: list[tuple[Library, Version]], config: ToolConfig) -> list[str]:
     for library, version in releases:
         library.write_version(Path(repo.working_dir), version)
-    with repo.git.custom_environment(
-        GIT_AUTHOR_NAME=config.bot.name,
-        GIT_AUTHOR_EMAIL=config.bot.email,
-        GIT_COMMITTER_NAME=config.bot.name,
-        GIT_COMMITTER_EMAIL=config.bot.email,
-    ):
-        # clean: a first release declares the version already
-        if repo.is_dirty():
-            summary: str = ", ".join(
-                f"{library.config.name} {version}" for library, version in releases
-            )
-            repo.git.commit("-a", "-m", f"{config.release_commit_prefix}{summary}")
-        tags: list[str] = [library.tag(version) for library, version in releases]
-        for tag in tags:
-            repo.create_tag(tag, message=tag)
-        # all or nothing: a release commit on main without its tag would block every later run
-        repo.git.push("--atomic", REMOTE, PUSH_HEAD_TO_MAIN, *tags)
-    with Path(os.environ[OUTPUT_VARIABLE]).open("a", encoding=ENCODING) as output:
-        output.write(f"{TAGS_OUTPUT}={TAG_SEPARATOR.join(tags)}\n")
+    # the bot commits and tags; CI's checkout has no git identity of its own
+    with repo.config_writer() as git_config:
+        git_config.set_value(GIT_USER, GIT_NAME, config.bot.name)
+        git_config.set_value(GIT_USER, GIT_EMAIL, config.bot.email)
+    # clean: a first release declares the version already
+    if repo.is_dirty():
+        summary: str = ", ".join(
+            f"{library.config.name} {version}" for library, version in releases
+        )
+        repo.git.commit("-a", "-m", f"{config.release_commit_prefix}{summary}")
+    tags: list[str] = [library.tag(version) for library, version in releases]
+    for tag in tags:
+        repo.create_tag(tag, message=tag)
+    # all or nothing: a release commit on main without its tag would block every later run
+    repo.git.push("--atomic", REMOTE, PUSH_HEAD_TO_MAIN, *tags)
+    return tags
 
 
 def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
@@ -98,7 +96,7 @@ def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
     if not releases:
         say("nothing to release")
         return
-    _publish(repo, releases, config)
+    set_output(TAGS_OUTPUT, TAG_SEPARATOR.join(_publish(repo, releases, config)))
     for library, version in releases:
         say(f"released {library.config.name} {version}")
 
