@@ -82,8 +82,7 @@ Run the `uv` commands in `markcom/` and `release-tools/`, and the `npm` commands
 | `uv run ruff check .` | Lint (Ruff) |
 | `uv run ruff format --check .` | Format check (Ruff) |
 | `uv run mypy src` | Type check (mypy) |
-| `uv run bandit -q -r src -x '*_test.py'` | Security scan (Bandit; markcom) |
-| `uv run bandit -q -r src -c pyproject.toml` | Security scan (Bandit; release-tools) |
+| `uv run bandit -q -r src -c pyproject.toml` | Security scan (Bandit) |
 | `uv lock --check` | Checks that `uv.lock` matches `pyproject.toml` |
 | `uv run pip-audit --skip-editable` | Dependency audit (pip-audit) |
 | `npm test` | Unit tests with an 85% coverage gate (Vitest) |

@@ -7,45 +7,22 @@ on:
     branches: [main]
 
 jobs:
-  markcom:
+  python-libraries:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        library: [markcom, release-tools]
     defaults:
       run:
-        working-directory: markcom
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Install dbus-run-session and Qt's system libraries
-        run: sudo apt-get update && sudo apt-get install --yes dbus-daemon libegl1
-      - name: Install dependencies (including dev and test)
-        run: uv sync --locked
-      - name: Lint
-        run: uv run ruff check .
-      - name: Format check
-        run: uv run ruff format --check .
-      - name: Strict type check
-        run: uv run mypy src
-      - name: Language security scanner
-        run: uv run bandit -q -r src -x '*_test.py'
-      - name: Dependency audit
-        run: uv run pip-audit --skip-editable
-      - name: Tests with coverage gate
-        run: uv run pytest -q
-      # private session bus, so fake service can own org.freedesktop.Notifications
-      - name: Integration tests
-        run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
-
-  # tests clone this repo, so need every commit and tag
-  release-tools:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: release-tools
+        working-directory: ${{ matrix.library }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # release-tools' tests clone this repo, so need every commit and tag
           fetch-depth: 0
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - name: Install dbus-run-session and Qt's system libraries
+        run: sudo apt-get update && sudo apt-get install --yes dbus-daemon libegl1
       - name: Install dependencies (including dev and test)
         run: uv sync --locked
       - name: Lint
@@ -60,6 +37,10 @@ jobs:
         run: uv run pip-audit --skip-editable
       - name: Tests with coverage gate
         run: uv run pytest -q
+      # private session bus, so fake service can own org.freedesktop.Notifications
+      - name: Integration tests
+        if: matrix.library == 'markcom'
+        run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
 
   versions-unchanged:
     uses: ./.github/workflows/versions-unchanged.yml
@@ -102,8 +83,8 @@ jobs:
         run: npm run test:e2e --if-present
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [markcom, web-libraries, release-tools]
+    if: github.event_name == 'push'
+    needs: [python-libraries, web-libraries]
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
@@ -111,7 +92,6 @@ jobs:
 
   # publishes any latest tag npm lacks, so next run retries a failed publish
   publish-web-libraries:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: release
     runs-on: ubuntu-latest
     permissions:
