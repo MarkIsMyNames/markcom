@@ -6,7 +6,6 @@ from typing import ClassVar, cast, override
 
 import tomlkit
 from git import GitCommandError, Repo
-from markcom.config import load_config
 from semver import Version
 from tomlkit.items import AoT, Table
 from tomlkit.toml_document import TOMLDocument
@@ -156,6 +155,5 @@ KINDS: dict[LibraryKind, type[Library]] = {
 }
 
 
-def load_libraries(root: Path, file_name: str) -> tuple[Library, ...]:
-    config: ReleaseConfig = load_config(root / file_name, ReleaseConfig)
-    return tuple(KINDS[library.kind](library) for library in config.libraries)
+def libraries_in(release: ReleaseConfig) -> tuple[Library, ...]:
+    return tuple(KINDS[library.kind](library) for library in release.libraries)

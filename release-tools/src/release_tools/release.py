@@ -3,12 +3,12 @@ from enum import StrEnum
 from pathlib import Path
 
 from git import GitCommandError, Repo
-from markcom.config import ConfigError
+from markcom.config import ConfigError, load_config
 from markcom.runner import run
 from markcom.secrets import NoSecrets
 from semver import Version
 
-from release_tools.config import CONFIG_PATH, Labels, ToolConfig
+from release_tools.config import CONFIG_PATH, Labels, ReleaseConfig, ToolConfig
 from release_tools.libraries import (
     ENCODING,
     HEAD,
@@ -17,7 +17,7 @@ from release_tools.libraries import (
     REMOTE_MAIN,
     Library,
     VersionError,
-    load_libraries,
+    libraries_in,
 )
 from release_tools.report import error, say
 
@@ -88,9 +88,12 @@ def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
         moved: str = "main has moved past this commit"
         raise ReleaseError(moved)
     level: BumpLevel = _bump_level(os.environ[LABELS_VARIABLE].splitlines(), config.labels)
+    release: ReleaseConfig = load_config(
+        Path(repo.working_dir) / config.release_config, ReleaseConfig
+    )
     releases: list[tuple[Library, Version]] = [
         (library, version)
-        for library in load_libraries(Path(repo.working_dir), config.release_config)
+        for library in libraries_in(release)
         if (version := _next_version(repo, library, level)) is not None
     ]
     if not releases:
