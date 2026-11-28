@@ -2,7 +2,7 @@ import json
 import tomllib
 from abc import ABC, abstractmethod
 from pathlib import Path, PurePosixPath
-from typing import ClassVar, cast, override
+from typing import ClassVar, Final, TypedDict, override
 
 import tomlkit
 from git import GitCommandError, Repo
@@ -24,17 +24,24 @@ PYPROJECT: str = "pyproject.toml"
 UV_LOCK: str = "uv.lock"
 PACKAGE_JSON: str = "package.json"
 PACKAGE_LOCK: str = "package-lock.json"
-VERSION_KEY: str = "version"
+# Final: mypy then takes it as a TypedDict key
+VERSION_KEY: Final = "version"
 NAME_KEY: str = "name"
 PROJECT_TABLE: str = "project"
 UV_LOCK_PACKAGES: str = "package"
-NPM_LOCK_PACKAGES: str = "packages"
+NPM_LOCK_PACKAGES: Final = "packages"
 NPM_ROOT_PACKAGE: str = ""
 # npm's own formatting
 NPM_INDENT: int = 2
 
-type JsonValue = str | int | float | bool | list[JsonValue] | dict[str, JsonValue] | None
-type JsonObject = dict[str, JsonValue]
+
+# only the keys release writes; json.dumps keeps the rest
+class NpmManifest(TypedDict):
+    version: str
+
+
+class NpmLock(NpmManifest):
+    packages: dict[str, NpmManifest]
 
 
 class VersionError(ValueError): ...
@@ -114,12 +121,13 @@ class PythonLibrary(Library):
     def write_version(self, root: Path, version: Version) -> None:
         pyproject_path: Path = root / self._folder / self.manifest
         pyproject: TOMLDocument = tomlkit.parse(pyproject_path.read_text(encoding=ENCODING))
-        project: Table = cast("Table", pyproject[PROJECT_TABLE])
+        project: Table = pyproject[PROJECT_TABLE]
         project[VERSION_KEY] = str(version)
         pyproject_path.write_text(tomlkit.dumps(pyproject), encoding=ENCODING)
         lock_path: Path = root / self._folder / UV_LOCK
         lock: TOMLDocument = tomlkit.parse(lock_path.read_text(encoding=ENCODING))
-        for package in cast("AoT", lock[UV_LOCK_PACKAGES]):
+        packages: AoT = lock[UV_LOCK_PACKAGES]
+        for package in packages:
             if package[NAME_KEY] == project[NAME_KEY]:
                 package[VERSION_KEY] = str(version)
         lock_path.write_text(tomlkit.dumps(lock), encoding=ENCODING)
@@ -136,17 +144,21 @@ class NpmLibrary(Library):
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
-        for path in (root / self._folder / self.manifest, root / self._folder / PACKAGE_LOCK):
-            data: JsonObject = json.loads(path.read_text(encoding=ENCODING))
-            data[VERSION_KEY] = str(version)
-            # package-lock.json repeats the version in its root package entry
-            if NPM_LOCK_PACKAGES in data:
-                packages: dict[str, JsonObject] = cast(
-                    "dict[str, JsonObject]", data[NPM_LOCK_PACKAGES]
-                )
-                packages[NPM_ROOT_PACKAGE][VERSION_KEY] = str(version)
-            text: str = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
-            path.write_text(f"{text}\n", encoding=ENCODING)
+        manifest_path: Path = root / self._folder / self.manifest
+        manifest: NpmManifest = json.loads(manifest_path.read_text(encoding=ENCODING))
+        manifest[VERSION_KEY] = str(version)
+        self._write_json(manifest_path, manifest)
+        lock_path: Path = root / self._folder / PACKAGE_LOCK
+        lock: NpmLock = json.loads(lock_path.read_text(encoding=ENCODING))
+        # package-lock.json repeats the version in its root package entry
+        lock[VERSION_KEY] = str(version)
+        lock[NPM_LOCK_PACKAGES][NPM_ROOT_PACKAGE][VERSION_KEY] = str(version)
+        self._write_json(lock_path, lock)
+
+    @staticmethod
+    def _write_json(path: Path, data: NpmManifest) -> None:
+        text: str = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
+        path.write_text(f"{text}\n", encoding=ENCODING)
 
 
 KINDS: dict[LibraryKind, type[Library]] = {
