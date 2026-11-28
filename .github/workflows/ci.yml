@@ -14,7 +14,7 @@ jobs:
         working-directory: markcom
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Install Qt's system libraries (the tray tests draw off screen)
         run: sudo apt-get update && sudo apt-get install --yes libegl1
       - name: Install dependencies (including dev and test)
@@ -40,7 +40,7 @@ jobs:
         working-directory: markcom
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       # libegl1: pytest-qt loads Qt even for these tests
       - name: Install dbus-run-session and Qt's system libraries
         run: sudo apt-get update && sudo apt-get install --yes dbus-daemon libegl1
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Install dependencies (including dev and test)
         run: uv sync --locked
       - name: Lint
