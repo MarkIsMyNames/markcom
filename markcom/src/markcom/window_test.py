@@ -18,9 +18,11 @@ from markcom.own_origin import LOOPBACK
 from markcom.window import WebWindow
 
 # Qt draws off screen; no display. CI blocks Chromium sandbox; tests load only own pages.
-# Window processes inherit both.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
+# offscreen has no GL: Chromium's GPU code crashes (SIGTRAP) soon after a page draws
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
+# window processes inherit all three
 
 # Window process starts Python, Qt and Chromium before asking for page.
 WAIT_MS = 30000

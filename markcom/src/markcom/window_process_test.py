@@ -18,6 +18,8 @@ from markcom.window_process import OwnOriginWindow
 # Qt draws off screen; no display. CI blocks Chromium sandbox; tests load only own pages.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
+# offscreen has no GL: Chromium's GPU code crashes (SIGTRAP) soon after a page draws
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
 
 QUIET_MS = 500
 ANY_FREE_PORT = 0
