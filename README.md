@@ -65,7 +65,8 @@ Import each from its module, such as `from markcom.runner import run`: the packa
 | `@markcom/web-config/prettier` | Prettier settings |
 | `@markcom/web-config/tsconfig.json` | TypeScript settings to extend |
 | `@markcom/web-config/vitest` | Vitest coverage settings (`coverageGate`) |
-| `@markcom/web-config/playwright` | Playwright settings (`createPlaywrightConfig`) and the test that screenshots every Storybook story (`testStoryScreenshots`) |
+| `@markcom/web-config/playwright` | Playwright settings (`createPlaywrightConfig`) |
+| `@markcom/web-config/story-screenshots` | The test that screenshots every Storybook story (`testStoryScreenshots`) |
 | `@markcom/web-config/storybook` | Storybook settings (`createStorybookConfig`) |
 
 ## Commands
