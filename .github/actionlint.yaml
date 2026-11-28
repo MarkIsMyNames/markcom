@@ -1,5 +1,0 @@
-paths:
-  .github/workflows/{release,versions-unchanged}.yml:
-    ignore:
-      # actionlint 1.7.12, the latest, predates GitHub's job.workflow_* context
-      - 'property "workflow_(repository|sha)" is not defined'
