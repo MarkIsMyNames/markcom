@@ -11,14 +11,14 @@ jobs:
   release:
     runs-on: ubuntu-latest
     # runs take turns: each starts from last one's tags
-    concurrency:
-      group: release
-      cancel-in-progress: false
+    concurrency: release
     permissions:
       contents: write
       pull-requests: read
     outputs:
       tags: ${{ steps.release.outputs.tags }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -34,19 +34,15 @@ jobs:
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Release
         id: release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           # labels of PR merged as this commit; none on direct push
-          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" |
-            jq -r --arg sha "$GITHUB_SHA" '.[] | select(.merge_commit_sha == $sha) | .labels[].name')
+          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+            --jq '.[] | select(.merge_commit_sha == env.GITHUB_SHA) | .labels[].name')
           export RELEASE_LABELS
           uv run --locked --project .release-tools/release-tools release
       - name: Create a GitHub release for each tag
         if: steps.release.outputs.tags != ''
         env:
-          GH_TOKEN: ${{ github.token }}
           TAGS: ${{ steps.release.outputs.tags }}
         run: |
           for tag in $TAGS; do
