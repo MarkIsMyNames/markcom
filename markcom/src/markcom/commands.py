@@ -1,20 +1,18 @@
-"""Starts other programs from argument lists, never through a shell."""
-
 import logging
+import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
-from contextlib import AbstractContextManager, contextmanager
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import override
+from types import TracebackType
+from typing import Self, override
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class CommandError(Exception):
-    """A command could not start or did not succeed."""
+class CommandError(Exception): ...
 
 
 class CommandNotFoundError(CommandError):
@@ -49,6 +47,52 @@ class CommandResult:
     stderr: str
 
 
+def _resolve(args: Sequence[str]) -> list[str]:
+    executable: str | None = shutil.which(args[0])
+    if executable is None:
+        raise CommandNotFoundError(args[0])
+    return [executable, *args[1:]]
+
+
+class BackgroundProcess:
+    """Runs for a `with` block; on exit, terminated, then killed after `stop_timeout`."""
+
+    def __init__(self, args: Sequence[str], stop_timeout: timedelta) -> None:
+        self._command: list[str] = _resolve(args)
+        self._name: str = args[0]
+        self._stop_timeout: timedelta = stop_timeout
+        self._process: subprocess.Popen[bytes] | None = None
+
+    def __enter__(self) -> Self:
+        logger.info("Starting %s in the background", self._name)
+        self._process = subprocess.Popen(
+            self._command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        return self
+
+    def __exit__(
+        self,
+        _type: type[BaseException] | None,
+        _error: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        if self._process is None:
+            return
+        with self._process as process:
+            process.terminate()
+            try:
+                process.wait(timeout=self._stop_timeout.total_seconds())
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "%s did not stop within %s of terminate, so it is killed",
+                    self._name,
+                    self._stop_timeout,
+                )
+                process.kill()
+                process.wait()
+        logger.info("Stopped %s, exit code %d", self._name, process.returncode)
+
+
 class CommandRunner(ABC):
     @abstractmethod
     def run(self, args: Sequence[str]) -> None: ...
@@ -62,9 +106,7 @@ class CommandRunner(ABC):
         """Never raises on non-zero: callers use the exit code to ask (is this installed?)."""
 
     @abstractmethod
-    def background(
-        self, args: Sequence[str], stop_timeout: timedelta
-    ) -> AbstractContextManager[None]: ...
+    def background(self, args: Sequence[str], stop_timeout: timedelta) -> BackgroundProcess: ...
 
 
 class SubprocessRunner(CommandRunner):
@@ -78,7 +120,7 @@ class SubprocessRunner(CommandRunner):
 
     @override
     def capture(self, args: Sequence[str]) -> CommandResult:
-        command: list[str] = self._resolve(args)
+        command: list[str] = _resolve(args)
         logger.debug("Capturing %s", args[0])
         completed: subprocess.CompletedProcess[str] = subprocess.run(
             command, capture_output=True, text=True, check=False
@@ -89,42 +131,17 @@ class SubprocessRunner(CommandRunner):
         )
 
     @override
-    @contextmanager
-    def background(self, args: Sequence[str], stop_timeout: timedelta) -> Iterator[None]:
-        command: list[str] = self._resolve(args)
-        logger.info("Starting %s in the background", args[0])
-        with subprocess.Popen(
-            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        ) as process:
-            try:
-                yield
-            finally:
-                process.terminate()
-                try:
-                    process.wait(timeout=stop_timeout.total_seconds())
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        "%s did not stop within %s of terminate; killing it", args[0], stop_timeout
-                    )
-                    process.kill()
-                    process.wait()
-                logger.info("Stopped %s, exit code %d", args[0], process.returncode)
+    def background(self, args: Sequence[str], stop_timeout: timedelta) -> BackgroundProcess:
+        return BackgroundProcess(args, stop_timeout)
 
     @staticmethod
     def _run_checked(args: Sequence[str], stdin_text: str | None) -> None:
-        """stdin_text None leaves standard input as it is."""
-        command: list[str] = SubprocessRunner._resolve(args)
+        command: list[str] = _resolve(args)
         logger.info("Running %s", args[0])
+        # input None leaves stdin as the caller's
         completed: subprocess.CompletedProcess[str] = subprocess.run(
             command, input=stdin_text, text=True, check=False
         )
-        if completed.returncode != 0:
+        if completed.returncode != os.EX_OK:
             raise CommandFailedError(args[0], completed.returncode)
         logger.info("Finished %s", args[0])
-
-    @staticmethod
-    def _resolve(args: Sequence[str]) -> list[str]:
-        executable: str | None = shutil.which(args[0])
-        if executable is None:
-            raise CommandNotFoundError(args[0])
-        return [executable, *args[1:]]
