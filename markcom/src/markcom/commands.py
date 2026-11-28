@@ -4,10 +4,11 @@ import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import timedelta
 from types import TracebackType
-from typing import Self, override
+from typing import override
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -59,9 +60,7 @@ class CommandResult:
     stderr: str
 
 
-class BackgroundProcess:
-    """Runs for a `with` block; on exit, terminated, then killed after `stop_timeout`."""
-
+class BackgroundProcess(AbstractContextManager[None]):
     def __init__(
         self, command: list[str], environment: Mapping[str, str], stop_timeout: timedelta
     ) -> None:
@@ -71,7 +70,8 @@ class BackgroundProcess:
         self._stop_timeout: timedelta = stop_timeout
         self._process: subprocess.Popen[bytes] | None = None
 
-    def __enter__(self) -> Self:
+    @override
+    def __enter__(self) -> None:
         logger.info("Starting %s in the background", self._name)
         self._process = subprocess.Popen(
             self._command,
@@ -79,8 +79,8 @@ class BackgroundProcess:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        return self
 
+    @override
     def __exit__(
         self,
         _type: type[BaseException] | None,
@@ -108,21 +108,22 @@ class CommandRunner(ABC):
     @abstractmethod
     def run(self, args: Sequence[str]) -> None: ...
 
+    # prompts such as sdkmanager --licenses wait for "y" on stdin
     @abstractmethod
-    def run_with_input(self, args: Sequence[str], stdin_text: str) -> None:
-        """For prompts such as sdkmanager --licenses, which waits for "y" on stdin."""
+    def run_with_input(self, args: Sequence[str], stdin_text: str) -> None: ...
 
+    # never raises on non-zero: exit code is the answer (is this installed?)
     @abstractmethod
-    def capture(self, args: Sequence[str]) -> CommandResult:
-        """Never raises on non-zero: callers use the exit code to ask (is this installed?)."""
+    def capture(self, args: Sequence[str]) -> CommandResult: ...
 
+    # terminated on leaving the with block, killed after stop_timeout
     @abstractmethod
-    def background(self, args: Sequence[str], stop_timeout: timedelta) -> BackgroundProcess: ...
+    def run_in_background(
+        self, args: Sequence[str], stop_timeout: timedelta
+    ) -> AbstractContextManager[None]: ...
 
 
 class SubprocessRunner(CommandRunner):
-    """Starts only `programs`, each found on `environment`'s PATH and given only `environment`."""
-
     def __init__(self, programs: frozenset[str], environment: Mapping[str, str]) -> None:
         self._programs: frozenset[str] = programs
         self._environment: dict[str, str] = dict(environment)
@@ -148,7 +149,9 @@ class SubprocessRunner(CommandRunner):
         )
 
     @override
-    def background(self, args: Sequence[str], stop_timeout: timedelta) -> BackgroundProcess:
+    def run_in_background(
+        self, args: Sequence[str], stop_timeout: timedelta
+    ) -> AbstractContextManager[None]:
         return BackgroundProcess(self._resolve(args), self._environment, stop_timeout)
 
     def _run_checked(self, args: Sequence[str], stdin_text: str | None) -> None:

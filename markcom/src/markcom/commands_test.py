@@ -20,7 +20,7 @@ PYTHON: str = sys.executable
 MISSING: str = "markcom-no-such-command"
 ENVIRONMENT: dict[str, str] = {"PATH": os.environ["PATH"], "MARKCOM_TEST": "given"}
 STOP_TIMEOUT: timedelta = timedelta(seconds=5)
-# Child sends its pid only once it is ready (signal handler set), so the test never races it.
+# child sends pid only once ready (handler set): test never races it
 READY_TIMEOUT_SECONDS: float = 30.0
 SLEEPER: str = (
     "import os, sys, time; open(sys.argv[1], 'w').write(str(os.getpid())); time.sleep(600)"
@@ -44,13 +44,10 @@ def pid_fifo(tmp_path: Path) -> Path:
 
 
 def read_pid(fifo: Path) -> int:
-    descriptor: int = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
-    try:
-        readable, _, _ = select.select([descriptor], [], [], READY_TIMEOUT_SECONDS)
+    with os.fdopen(os.open(fifo, os.O_RDONLY | os.O_NONBLOCK), "rb", buffering=0) as reader:
+        readable, _, _ = select.select([reader], [], [], READY_TIMEOUT_SECONDS)
         assert readable, "child never reported its pid"
-        return int(os.read(descriptor, 64))
-    finally:
-        os.close(descriptor)
+        return int(reader.read())
 
 
 def is_running(pid: int) -> bool:
@@ -74,7 +71,7 @@ def capture_args(runner: CommandRunner, args: list[str]) -> None:
 
 
 def enter_background(runner: CommandRunner, args: list[str]) -> None:
-    with runner.background(args, STOP_TIMEOUT):
+    with runner.run_in_background(args, STOP_TIMEOUT):
         pass
 
 
@@ -129,7 +126,7 @@ def test_run_with_input_passes_stdin_text(runner: CommandRunner) -> None:
 
 
 def test_background_stops_process_on_exit(runner: CommandRunner, pid_fifo: Path) -> None:
-    with runner.background([PYTHON, "-c", SLEEPER, str(pid_fifo)], STOP_TIMEOUT):
+    with runner.run_in_background([PYTHON, "-c", SLEEPER, str(pid_fifo)], STOP_TIMEOUT):
         pid: int = read_pid(pid_fifo)
         assert is_running(pid)
     assert not is_running(pid)
@@ -139,7 +136,7 @@ def test_background_stops_process_when_body_raises(runner: CommandRunner, pid_fi
     pids: list[int] = []
 
     def fail_inside_block() -> None:
-        with runner.background([PYTHON, "-c", SLEEPER, str(pid_fifo)], STOP_TIMEOUT):
+        with runner.run_in_background([PYTHON, "-c", SLEEPER, str(pid_fifo)], STOP_TIMEOUT):
             pids.append(read_pid(pid_fifo))
             raise KeyError
 
@@ -149,7 +146,7 @@ def test_background_stops_process_when_body_raises(runner: CommandRunner, pid_fi
 
 
 def test_background_kills_process_ignoring_terminate(runner: CommandRunner, pid_fifo: Path) -> None:
-    with runner.background(
+    with runner.run_in_background(
         [PYTHON, "-c", TERM_IGNORER, str(pid_fifo)], timedelta(milliseconds=100)
     ):
         pid: int = read_pid(pid_fifo)

@@ -86,7 +86,7 @@ ignore = [
     "PLR2004", # tests are black box and use plain literals
     "INP001",  # test files sit beside the code, not in a package of their own
 ]
-# The one module that starts processes; it takes list args, never a shell. Every launch is flagged.
+# only module that starts processes: list args, no shell, yet every launch is flagged
 "src/markcom/commands.py" = ["S603"]
 
 [tool.ruff.format]
