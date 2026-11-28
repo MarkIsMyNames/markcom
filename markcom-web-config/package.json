@@ -44,6 +44,7 @@
     "format": "prettier --ignore-path ../.gitignore --write .",
     "format:check": "prettier --ignore-path ../.gitignore --check .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
     "audit": "npm audit --audit-level=low"
   },
   "dependencies": {
@@ -71,6 +72,7 @@
   "devDependencies": {
     "@playwright/test": "^1.65.1",
     "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^5.1.2",
     "eslint": "^10.14.0",
     "jiti": "^2.7.0",
     "prettier": "^3.9.10",

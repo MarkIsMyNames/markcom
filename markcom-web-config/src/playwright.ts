@@ -1,19 +1,10 @@
-import {
-  defineConfig,
-  devices,
-  expect,
-  test,
-  type APIRequestContext,
-  type Page,
-  type PlaywrightTestConfig,
-} from '@playwright/test';
+import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test';
 
 import { APP_URL, STORYBOOK_URL } from './config.js';
 
-const SERVER_TIMEOUT_MS: number = 120_000;
+export { testStoryScreenshots } from './story-screenshots.ts';
 
-type StoryEntry = { id: string; type: string };
-type StoryIndex = { entries: Record<string, StoryEntry> };
+const SERVER_TIMEOUT_MS: number = 120_000;
 
 export function createPlaywrightConfig(): PlaywrightTestConfig {
   return defineConfig({
@@ -40,29 +31,5 @@ export function createPlaywrightConfig(): PlaywrightTestConfig {
       reuseExistingServer: !process.env['CI'],
       timeout: SERVER_TIMEOUT_MS,
     },
-  });
-}
-
-export function testStoryScreenshots(): void {
-  test('every story matches its baseline', async ({
-    page,
-    request,
-  }: {
-    page: Page;
-    request: APIRequestContext;
-  }): Promise<void> => {
-    const index: StoryIndex = (await (await request.get('/index.json')).json()) as StoryIndex;
-    const storyIds: string[] = Object.values(index.entries)
-      .filter((entry: StoryEntry): boolean => entry.type === 'story')
-      .map((entry: StoryEntry): string => entry.id);
-
-    for (const id of storyIds) {
-      await test.step(id, async (): Promise<void> => {
-        await page.goto(`/iframe.html?id=${id}&viewMode=story`);
-        await page.locator('#storybook-root').waitFor();
-        await page.evaluate((): Promise<FontFaceSet> => document.fonts.ready);
-        await expect.soft(page).toHaveScreenshot(`${id}.png`, { fullPage: true });
-      });
-    }
   });
 }

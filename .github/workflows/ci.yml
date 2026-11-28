@@ -67,7 +67,6 @@ jobs:
     permissions:
       contents: read
 
-  # web-config built first: markcom-i18n lints itself with it
   web-libraries:
     runs-on: ubuntu-latest
     strategy:
@@ -83,10 +82,6 @@ jobs:
           node-version: 26
           cache: npm
           cache-dependency-path: "*/package-lock.json"
-      - name: Build markcom-web-config, which markcom-i18n lints with
-        if: matrix.library == 'markcom-i18n'
-        working-directory: markcom-web-config
-        run: npm ci && npm run build
       - name: Install dependencies (including dev and test)
         run: npm ci
       - name: Lint
@@ -99,16 +94,13 @@ jobs:
         run: npm run build
       - name: Dependency audit
         run: npm run audit
-      # web-config has no unit tests: linting markcom-i18n and react-ui template with it is its test
       - name: Tests with coverage gate
-        if: matrix.library == 'markcom-i18n'
         run: npm test
       - name: Install Chromium for the end-to-end tests
         if: matrix.library == 'markcom-i18n'
         run: npx playwright install --with-deps chromium
-      - name: End-to-end tests (language routing on the test site in e2e/site)
-        if: matrix.library == 'markcom-i18n'
-        run: npm run test:e2e
+      - name: End-to-end tests
+        run: npm run test:e2e --if-present
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -171,11 +163,6 @@ jobs:
           fi
           echo "Publishing ${name} ${version}"
           echo "publish=true" >> "$GITHUB_OUTPUT"
-      # markcom-i18n's tsconfig extends web-config's, which needs its own dependencies
-      - name: Install markcom-web-config's dependencies
-        if: steps.release.outputs.publish == 'true' && matrix.library == 'markcom-i18n'
-        working-directory: markcom-web-config
-        run: npm ci
       - name: Build
         if: steps.release.outputs.publish == 'true'
         run: npm ci && npm run build

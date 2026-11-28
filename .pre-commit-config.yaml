@@ -144,60 +144,67 @@ repos:
         entry: bash -c 'cd markcom-web-config && npm run lint'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
 
       - id: markcom-web-config-format
         name: "markcom-web-config: Format check"
         entry: bash -c 'cd markcom-web-config && npm run format:check'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
 
       - id: markcom-web-config-types
         name: "markcom-web-config: Strict type check"
         entry: bash -c 'cd markcom-web-config && npm run typecheck'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
 
       - id: markcom-web-config-audit
         name: "markcom-web-config: Dependency audit"
         entry: bash -c 'cd markcom-web-config && npm run audit'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
+
+      - id: markcom-web-config-unit-tests
+        name: "markcom-web-config: Unit tests with coverage gate"
+        entry: bash -c 'cd markcom-web-config && npm test'
+        language: system
+        pass_filenames: false
+        files: ^markcom-web-config/
 
       - id: markcom-i18n-lint
         name: "markcom-i18n: Lint"
         entry: bash -c 'cd markcom-i18n && npm run lint'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-format
         name: "markcom-i18n: Format check"
         entry: bash -c 'cd markcom-i18n && npm run format:check'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-types
         name: "markcom-i18n: Strict type check"
         entry: bash -c 'cd markcom-i18n && npm run typecheck'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-audit
         name: "markcom-i18n: Dependency audit"
         entry: bash -c 'cd markcom-i18n && npm run audit'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-unit-tests
         name: "markcom-i18n: Unit tests with coverage gate"
         entry: bash -c 'cd markcom-i18n && npm test'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/

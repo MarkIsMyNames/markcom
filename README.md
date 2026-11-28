@@ -85,7 +85,7 @@ Run the `uv` commands in `markcom/` and `release-tools/`, and the `npm` commands
 | `uv run bandit -q -r src -c pyproject.toml` | Security scan (Bandit; release-tools) |
 | `uv lock --check` | Checks that `uv.lock` matches `pyproject.toml` |
 | `uv run pip-audit --skip-editable` | Dependency audit (pip-audit) |
-| `npm test` | Unit tests with coverage (Vitest; markcom-i18n only) |
+| `npm test` | Unit tests with an 85% coverage gate (Vitest) |
 | `npm run test:e2e` | End-to-end tests of the routing on a small test site (Playwright; markcom-i18n only) |
 | `npm run lint` | Lint, with security rules (ESLint) |
 | `npm run format:check` | Format check (Prettier) |
