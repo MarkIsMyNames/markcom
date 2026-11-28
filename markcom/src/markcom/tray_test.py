@@ -69,7 +69,8 @@ def make_tray(tmp_path):
         stack.callback(app.shutdown)
 
         def make(notifier=None, target=None, actions=()):
-            notifications = None if notifier is None else TrayNotifications(notifier, DISPLAY_SEC)
+            notifier = SentNotifications() if notifier is None else notifier
+            notifications = TrayNotifications(notifier, DISPLAY_SEC)
             return stack.enter_context(
                 Tray(app, icon, notifications, target or FakeWindow(), actions)
             )
@@ -169,12 +170,6 @@ def test_notifications_sent_through_the_tray_show_a_badge_until_a_left_click(mak
     assert not _has_badge()
 
 
-def test_a_tray_without_a_notifier_refuses_to_send(make_tray):
-    tray = make_tray()
-    with pytest.raises(RuntimeError):
-        tray.send("t", "m", Urgency.Critical, NEVER_EXPIRES_SEC)
-
-
 def test_quit_ends_exec(make_tray):
     make_tray()
     QTimer.singleShot(0, icon().contextMenu().actions()[-1].trigger)
@@ -187,7 +182,8 @@ def test_the_icon_shows_until_the_tray_is_left(tmp_path):
     with ExitStack() as stack:
         app = QApplication(["App"])
         stack.callback(app.shutdown)
-        with Tray(app, icon_path, None, FakeWindow(), ()):
+        notifications = TrayNotifications(SentNotifications(), DISPLAY_SEC)
+        with Tray(app, icon_path, notifications, FakeWindow(), ()):
             assert icon().isVisible()
         assert not icon().isVisible()
 
@@ -261,11 +257,6 @@ def test_a_repeated_error_is_sent_each_time(make_tray):
     app_log.error("down")
     app_log.error("down")
     assert len(sent) == 2
-
-
-def test_a_tray_without_a_notifier_does_not_fail_on_error_records(make_tray):
-    make_tray()
-    app_log.error("down")
 
 
 def test_records_are_not_sent_once_the_tray_is_left(tmp_path):

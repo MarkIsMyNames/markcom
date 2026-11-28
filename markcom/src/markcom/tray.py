@@ -106,7 +106,7 @@ class Tray:
         self,
         app: QApplication,
         icon: Path,
-        notifications: TrayNotifications | None,
+        notifications: TrayNotifications,
         target: TrayTarget,
         actions: Sequence[TrayAction],
     ) -> None:
@@ -114,16 +114,14 @@ class Tray:
         self._app: QApplication = app
         # windows come and go; only Quit ends a tray app
         self._app.setQuitOnLastWindowClosed(False)
-        self._notifications: TrayNotifications | None = notifications
+        self._notifier: Notifier = notifications.notifier
         # GUI thread only, so no lock
         self._unread: int = 0
         # one worker: a slow menu action can't freeze the menu
         self._worker: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
         self._target: TrayTarget = target
-        self._records: _RecordNotifications | None = (
-            None
-            if notifications is None
-            else _RecordNotifications(self.send, notifications.error_display_sec)
+        self._records: _RecordNotifications = _RecordNotifications(
+            self.send, notifications.error_display_sec
         )
         # scaled up too, so every icon gets the same badge
         self._plain: QIcon = QIcon(
@@ -167,15 +165,13 @@ class Tray:
         self._worker.submit(_run_logged, action)
 
     def __enter__(self) -> Self:
-        if self._records is not None:
-            logging.getLogger().addHandler(self._records)
-            logger.debug("ERROR records go to notifications")
+        logging.getLogger().addHandler(self._records)
+        logger.debug("ERROR records go to notifications")
         logger.info("tray icon shown")
         return self
 
     def __exit__(self, *_: object) -> None:
-        if self._records is not None:
-            logging.getLogger().removeHandler(self._records)
+        logging.getLogger().removeHandler(self._records)
         # app may outlive tray; left-over icon would call a stopped worker
         self._icon.hide()
         self._worker.shutdown()
@@ -183,10 +179,7 @@ class Tray:
 
     def send(self, title: str, message: str, urgency: Urgency, display_sec: int) -> None:
         # any thread: Qt runs the unread count on the GUI thread
-        if self._notifications is None:
-            no_notifier: str = "this tray was built without a notifier"
-            raise RuntimeError(no_notifier)
-        self._notifications.notifier.send(title, message, urgency, display_sec)
+        self._notifier.send(title, message, urgency, display_sec)
         QTimer.singleShot(0, self._app, lambda: self._show_unread(self._unread + 1))
 
     def _show_unread(self, count: int) -> None:
