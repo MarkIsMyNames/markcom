@@ -7,8 +7,8 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     coverage: coverageGate({
       include: ['src/**/*.ts'],
-      // story-screenshots runs only under Playwright, which Vitest can't cover
-      exclude: ['src/**/*.test.ts', 'src/config.ts', 'src/story-screenshots.ts'],
+      // testStoryScreenshots runs only under Playwright, which Vitest can't cover
+      exclude: ['src/**/*.test.ts', 'src/config.ts', 'src/playwright.ts'],
     }),
   },
 });
