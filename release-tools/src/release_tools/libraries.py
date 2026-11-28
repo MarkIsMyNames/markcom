@@ -46,9 +46,8 @@ class Library(ABC):
     tests: ClassVar[tuple[str, ...]]
 
     def __init__(self, config: LibraryConfig) -> None:
-        self.name: str = config.name
+        self.config: LibraryConfig = config
         self._folder: PurePosixPath = PurePosixPath(config.path)
-        self._tag_prefix: str = config.tag_prefix
         # in a git glob, **/ matches any depth, even none
         self._code: tuple[str, ...] = (
             *(
@@ -59,7 +58,7 @@ class Library(ABC):
         )
 
     def tag(self, version: Version) -> str:
-        return f"{self._tag_prefix}{version}"
+        return f"{self.config.tag_prefix}{version}"
 
     def exists_at(self, repo: Repo, revision: str) -> bool:
         try:
@@ -73,20 +72,20 @@ class Library(ABC):
             manifest: str = repo.git.show(f"{revision}:{self._folder / self.manifest}")
             text: str = self._version(manifest)
         except (GitCommandError, ValueError, KeyError, TypeError) as failure:
-            unreadable: str = f"could not read {self.name}'s version at {revision}"
+            unreadable: str = f"could not read {self.config.name}'s version at {revision}"
             raise VersionError(unreadable) from failure
         try:
             return Version.parse(text)
         except ValueError as failure:
-            malformed: str = f"{self.name}: version {text} is not of the form X.Y.Z"
+            malformed: str = f"{self.config.name}: version {text} is not of the form X.Y.Z"
             raise VersionError(malformed) from failure
 
     def latest_release(self, repo: Repo) -> Version | None:
         return max(
             (
-                Version.parse(tag.name.removeprefix(self._tag_prefix))
+                Version.parse(tag.name.removeprefix(self.config.tag_prefix))
                 for tag in repo.tags
-                if tag.name.startswith(self._tag_prefix)
+                if tag.name.startswith(self.config.tag_prefix)
             ),
             default=None,
         )

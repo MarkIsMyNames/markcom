@@ -18,7 +18,7 @@ def _check(repo: Repo, library: Library, labels: Labels, base: str) -> bool:
     try:
         after: Version = library.version_at(repo, HEAD)
         if not library.exists_at(repo, base):
-            say(f"{library.name}: {after}, new")
+            say(f"{library.config.name}: {after}, new")
             return True
         before: Version = library.version_at(repo, base)
     except VersionError as failure:
@@ -27,11 +27,11 @@ def _check(repo: Repo, library: Library, labels: Labels, base: str) -> bool:
     # as text: semver's != ignores build metadata, so 1.0.0+x would pass as 1.0.0
     if str(after) != str(before):
         error(
-            f"{library.name}: version changed from {before} to {after}; "
+            f"{library.config.name}: version changed from {before} to {after}; "
             f"CI sets it, so label the PR {labels.minor} or {labels.major} instead"
         )
         return False
-    say(f"{library.name}: {after}, unchanged")
+    say(f"{library.config.name}: {after}, unchanged")
     return True
 
 

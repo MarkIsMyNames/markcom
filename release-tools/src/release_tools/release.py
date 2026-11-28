@@ -69,7 +69,9 @@ def _publish(repo: Repo, releases: list[tuple[Library, Version]], config: ToolCo
     ):
         # clean: a first release declares the version already
         if repo.is_dirty():
-            summary: str = ", ".join(f"{library.name} {version}" for library, version in releases)
+            summary: str = ", ".join(
+                f"{library.config.name} {version}" for library, version in releases
+            )
             repo.git.commit("-a", "-m", f"{config.release_commit_prefix}{summary}")
         tags: list[str] = [library.tag(version) for library, version in releases]
         for tag in tags:
@@ -98,7 +100,7 @@ def _release(config: ToolConfig, _secrets: NoSecrets) -> None:
         return
     _publish(repo, releases, config)
     for library, version in releases:
-        say(f"released {library.name} {version}")
+        say(f"released {library.config.name} {version}")
 
 
 def main() -> int:
