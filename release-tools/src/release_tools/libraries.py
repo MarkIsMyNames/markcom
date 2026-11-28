@@ -4,12 +4,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path, PurePosixPath
 from typing import Any, ClassVar, override
 
-import tomlkit
 from git import GitCommandError, Repo
 from markcom.config import load_config
 from semver import Version
 from tomlkit.items import AoT, Table
 from tomlkit.toml_document import TOMLDocument
+from tomlkit.toml_file import TOMLFile
 
 from release_tools.config import LibraryConfig, LibraryKind, ReleaseConfig
 
@@ -109,18 +109,17 @@ class PythonLibrary(Library):
 
     @override
     def write_version(self, root: Path, version: Version) -> None:
-        pyproject_path: Path = root / self._folder / self.manifest
-        pyproject: TOMLDocument = tomlkit.parse(pyproject_path.read_text(encoding=ENCODING))
+        pyproject_file: TOMLFile = TOMLFile(root / self._folder / self.manifest)
+        pyproject: TOMLDocument = pyproject_file.read()
         project: Table = pyproject[PROJECT_TABLE]
         project[VERSION_KEY] = str(version)
-        pyproject_path.write_text(tomlkit.dumps(pyproject), encoding=ENCODING)
-        lock_path: Path = root / self._folder / UV_LOCK
-        lock: TOMLDocument = tomlkit.parse(lock_path.read_text(encoding=ENCODING))
+        pyproject_file.write(pyproject)
+        lock_file: TOMLFile = TOMLFile(root / self._folder / UV_LOCK)
+        lock: TOMLDocument = lock_file.read()
         packages: AoT = lock[UV_LOCK_PACKAGES]
-        for package in packages:
-            if package[NAME_KEY] == project[NAME_KEY]:
-                package[VERSION_KEY] = str(version)
-        lock_path.write_text(tomlkit.dumps(lock), encoding=ENCODING)
+        own: Table = next(package for package in packages if package[NAME_KEY] == project[NAME_KEY])
+        own[VERSION_KEY] = str(version)
+        lock_file.write(lock)
 
 
 class NpmLibrary(Library):
@@ -137,18 +136,14 @@ class NpmLibrary(Library):
         manifest_path: Path = root / self._folder / self.manifest
         manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding=ENCODING))
         manifest[VERSION_KEY] = str(version)
-        self._write_json(manifest_path, manifest)
         lock_path: Path = root / self._folder / PACKAGE_LOCK
         lock: dict[str, Any] = json.loads(lock_path.read_text(encoding=ENCODING))
         # package-lock.json repeats the version in its root package entry
         lock[VERSION_KEY] = str(version)
         lock[NPM_LOCK_PACKAGES][NPM_ROOT_PACKAGE][VERSION_KEY] = str(version)
-        self._write_json(lock_path, lock)
-
-    @staticmethod
-    def _write_json(path: Path, data: dict[str, Any]) -> None:
-        text: str = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
-        path.write_text(f"{text}\n", encoding=ENCODING)
+        for path, data in ((manifest_path, manifest), (lock_path, lock)):
+            text: str = json.dumps(data, indent=NPM_INDENT, ensure_ascii=False)
+            path.write_text(f"{text}\n", encoding=ENCODING)
 
 
 KINDS: dict[LibraryKind, type[Library]] = {
