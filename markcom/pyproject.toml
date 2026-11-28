@@ -108,5 +108,5 @@ init_typed = true
 warn_required_dynamic_aliases = true
 
 [tool.bandit]
-# tests: assert and fake credentials are how tests work; commands.py: own run, see ci.yml
+# tests: assert and fake credentials are how tests work; commands.py: ruff's S rules check it
 exclude_dirs = ["*_test.py", "*/commands.py"]

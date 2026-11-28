@@ -14,10 +14,8 @@ jobs:
         include:
           - library: markcom
             has_e2e: true
-            has_launcher: true
           - library: release-tools
             has_e2e: false
-            has_launcher: false
     defaults:
       run:
         working-directory: ${{ matrix.library }}
@@ -39,10 +37,6 @@ jobs:
         run: uv run mypy src
       - name: Language security scanner
         run: uv run bandit -q -r src -c pyproject.toml
-      # only module that starts processes: B404/B603 flag every launch, even list args with no shell
-      - name: Language security scanner (process launcher)
-        if: matrix.has_launcher
-        run: uv run bandit -q src/markcom/commands.py -s B404,B603
       - name: Dependency audit
         run: uv run pip-audit --skip-editable
       - name: Tests with coverage gate

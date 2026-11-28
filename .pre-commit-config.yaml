@@ -78,7 +78,7 @@ repos:
 
       - id: markcom-language-scanner
         name: "markcom: Language security scanner"
-        entry: bash -c 'cd markcom && uv run bandit -q -r src -c pyproject.toml && uv run bandit -q src/markcom/commands.py -s B404,B603'
+        entry: bash -c 'cd markcom && uv run bandit -q -r src -c pyproject.toml'
         language: system
         pass_filenames: false
         always_run: true
