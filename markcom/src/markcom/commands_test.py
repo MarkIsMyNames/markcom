@@ -9,6 +9,7 @@ import pytest
 
 from markcom.commands import (
     CommandFailedError,
+    CommandNotAllowedError,
     CommandNotFoundError,
     CommandResult,
     CommandRunner,
@@ -16,6 +17,8 @@ from markcom.commands import (
 )
 
 PYTHON: str = sys.executable
+MISSING: str = "markcom-no-such-command"
+ENVIRONMENT: dict[str, str] = {"PATH": os.environ["PATH"], "MARKCOM_TEST": "given"}
 STOP_TIMEOUT: timedelta = timedelta(seconds=5)
 # Child sends its pid only once it is ready (signal handler set), so the test never races it.
 READY_TIMEOUT_SECONDS: float = 30.0
@@ -30,7 +33,7 @@ TERM_IGNORER: str = (
 
 @pytest.fixture
 def runner() -> CommandRunner:
-    return SubprocessRunner()
+    return SubprocessRunner(frozenset({PYTHON, MISSING}), ENVIRONMENT)
 
 
 @pytest.fixture
@@ -102,8 +105,22 @@ def test_missing_command_raises_not_found(
     runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None]
 ) -> None:
     with pytest.raises(CommandNotFoundError) as raised:
-        start(runner, ["markcom-no-such-command"])
-    assert raised.value.command == "markcom-no-such-command"
+        start(runner, [MISSING])
+    assert raised.value.command == MISSING
+
+
+@pytest.mark.parametrize("start", [run_args, run_args_with_input, capture_args, enter_background])
+def test_a_program_not_allowed_is_refused(
+    runner: CommandRunner, start: Callable[[CommandRunner, list[str]], None]
+) -> None:
+    with pytest.raises(CommandNotAllowedError) as raised:
+        start(runner, ["true"])
+    assert raised.value.command == "true"
+
+
+def test_the_child_gets_only_the_given_environment(runner: CommandRunner) -> None:
+    script: str = "import os; print(sorted(k for k in os.environ if k != 'LC_CTYPE'))"
+    assert runner.capture([PYTHON, "-c", script]).stdout == "['MARKCOM_TEST', 'PATH']\n"
 
 
 def test_run_with_input_passes_stdin_text(runner: CommandRunner) -> None:

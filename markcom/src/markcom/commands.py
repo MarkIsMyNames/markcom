@@ -3,13 +3,15 @@ import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from types import TracebackType
 from typing import Self, override
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+PATH_VARIABLE: str = "PATH"
 
 
 class CommandError(Exception): ...
@@ -18,6 +20,16 @@ class CommandError(Exception): ...
 class CommandNotFoundError(CommandError):
     def __init__(self, command: str) -> None:
         super().__init__(f"{command} is not installed or not on PATH")
+        self._command: str = command
+
+    @property
+    def command(self) -> str:
+        return self._command
+
+
+class CommandNotAllowedError(CommandError):
+    def __init__(self, command: str) -> None:
+        super().__init__(f"{command} is not one of the programs this runner may start")
         self._command: str = command
 
     @property
@@ -47,26 +59,25 @@ class CommandResult:
     stderr: str
 
 
-def _resolve(args: Sequence[str]) -> list[str]:
-    executable: str | None = shutil.which(args[0])
-    if executable is None:
-        raise CommandNotFoundError(args[0])
-    return [executable, *args[1:]]
-
-
 class BackgroundProcess:
     """Runs for a `with` block; on exit, terminated, then killed after `stop_timeout`."""
 
-    def __init__(self, args: Sequence[str], stop_timeout: timedelta) -> None:
-        self._command: list[str] = _resolve(args)
-        self._name: str = args[0]
+    def __init__(
+        self, command: list[str], environment: Mapping[str, str], stop_timeout: timedelta
+    ) -> None:
+        self._command: list[str] = command
+        self._environment: dict[str, str] = dict(environment)
+        self._name: str = command[0]
         self._stop_timeout: timedelta = stop_timeout
         self._process: subprocess.Popen[bytes] | None = None
 
     def __enter__(self) -> Self:
         logger.info("Starting %s in the background", self._name)
         self._process = subprocess.Popen(
-            self._command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            self._command,
+            env=self._environment,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         return self
 
@@ -110,6 +121,12 @@ class CommandRunner(ABC):
 
 
 class SubprocessRunner(CommandRunner):
+    """Starts only `programs`, each found on `environment`'s PATH and given only `environment`."""
+
+    def __init__(self, programs: frozenset[str], environment: Mapping[str, str]) -> None:
+        self._programs: frozenset[str] = programs
+        self._environment: dict[str, str] = dict(environment)
+
     @override
     def run(self, args: Sequence[str]) -> None:
         self._run_checked(args, None)
@@ -120,10 +137,10 @@ class SubprocessRunner(CommandRunner):
 
     @override
     def capture(self, args: Sequence[str]) -> CommandResult:
-        command: list[str] = _resolve(args)
+        command: list[str] = self._resolve(args)
         logger.debug("Capturing %s", args[0])
         completed: subprocess.CompletedProcess[str] = subprocess.run(
-            command, capture_output=True, text=True, check=False
+            command, env=self._environment, capture_output=True, text=True, check=False
         )
         logger.debug("%s exited with %d", args[0], completed.returncode)
         return CommandResult(
@@ -132,16 +149,24 @@ class SubprocessRunner(CommandRunner):
 
     @override
     def background(self, args: Sequence[str], stop_timeout: timedelta) -> BackgroundProcess:
-        return BackgroundProcess(args, stop_timeout)
+        return BackgroundProcess(self._resolve(args), self._environment, stop_timeout)
 
-    @staticmethod
-    def _run_checked(args: Sequence[str], stdin_text: str | None) -> None:
-        command: list[str] = _resolve(args)
+    def _run_checked(self, args: Sequence[str], stdin_text: str | None) -> None:
+        command: list[str] = self._resolve(args)
         logger.info("Running %s", args[0])
         # input None leaves stdin as the caller's
         completed: subprocess.CompletedProcess[str] = subprocess.run(
-            command, input=stdin_text, text=True, check=False
+            command, input=stdin_text, env=self._environment, text=True, check=False
         )
         if completed.returncode != os.EX_OK:
             raise CommandFailedError(args[0], completed.returncode)
         logger.info("Finished %s", args[0])
+
+    def _resolve(self, args: Sequence[str]) -> list[str]:
+        if args[0] not in self._programs:
+            raise CommandNotAllowedError(args[0])
+        # the given PATH, not the parent's: whoever sets PATH picks the binary
+        executable: str | None = shutil.which(args[0], path=self._environment[PATH_VARIABLE])
+        if executable is None:
+            raise CommandNotFoundError(args[0])
+        return [executable, *args[1:]]
