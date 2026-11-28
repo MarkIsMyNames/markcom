@@ -15,8 +15,7 @@ from markcom.own_origin import LOOPBACK
 from markcom.window_messages import WindowSpec
 from markcom.window_process import OwnOriginWindow
 
-# no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
-# pages.
+# Qt draws off screen; no display. CI blocks Chromium sandbox; tests load only own pages.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 
@@ -96,7 +95,7 @@ def site(tmp_path_factory, other_site):
 
 @pytest.fixture(scope="module")
 def qapp():
-    """pytest-qt's app, but ended with this module, as the tray tests build their own."""
+    """Module-scoped: tray tests build own QApplication."""
     app = QApplication(["window-process-test"])
     yield app
     app.shutdown()
@@ -159,7 +158,7 @@ def make_window(request, site, icon, settings):
         return window
 
     yield make
-    # deleted now, while their QApplication lives: QtWebEngine aborts on a page deleted after it
+    # Delete while QApplication lives: QtWebEngine aborts on page deleted after it.
     for window in windows:
         window.close()
         window.deleteLater()
@@ -194,7 +193,6 @@ def test_the_window_stays_hidden_until_its_page_loads(make_window, qtbot):
 
 
 def test_a_page_that_fails_to_load_still_shows_the_window(make_window, qtbot):
-    # port 9 (discard): nothing listens, so the load fails
     window = make_window(base=f"http://{LOOPBACK}:{CLOSED_PORT}")
     qtbot.waitUntil(window.isVisible)
 

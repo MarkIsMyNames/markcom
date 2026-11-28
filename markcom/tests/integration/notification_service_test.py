@@ -1,8 +1,4 @@
-"""markcom's Linux notifications against a fake freedesktop notification service.
-
-Run under a private session bus, never the desktop's own, where the real service holds the
-name: `dbus-run-session -- uv run pytest tests/integration --no-cov`.
-"""
+"""Fake freedesktop notification service; private session bus only: desktop's has real one."""
 
 import asyncio
 import multiprocessing
@@ -20,9 +16,9 @@ from markcom.notifier import DesktopNotifier
 
 SERVICE = "org.freedesktop.Notifications"
 SERVICE_PATH = "/org/freedesktop/Notifications"
-# Notify replies with the new notification's ID, never 0.
+# Notify replies with new notification ID, never 0.
 NOTIFICATION_ID = 1
-# freedesktop Notifications spec: urgency hint byte for critical.
+# freedesktop spec: urgency hint byte for critical.
 CRITICAL_URGENCY_BYTE = 2
 MS_PER_SEC = 1000
 DISPLAY_SEC = 3
@@ -32,8 +28,7 @@ READY = "ready"
 
 
 class Notifications(ServiceInterface):
-    """Records each Notify call; desktop-notifier introspects it first, so it must be a real
-    interface rather than a bare message handler."""
+    """desktop-notifier introspects it first: real interface, not bare message handler."""
 
     def __init__(self, events):
         super().__init__(SERVICE)
@@ -84,8 +79,7 @@ def run_service(events, stop):
 
 
 class FakeNotificationService:
-    """Owns org.freedesktop.Notifications in its own process, as a real one does: run as a
-    thread of the test process, it never received markcom's blocking call."""
+    """Own process, as real one: as test-process thread, it never got markcom's blocking call."""
 
     def __init__(self):
         self._events = multiprocessing.Queue()
@@ -105,7 +99,6 @@ class FakeNotificationService:
         self._process.join(timeout=WAIT_SEC)
 
     def next_call(self):
-        """(app_name, title, body, hints, timeout_ms) of the next Notify call received."""
         return self._events.get(timeout=WAIT_SEC)
 
 

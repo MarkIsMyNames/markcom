@@ -16,7 +16,7 @@ from markcom.config import CONFIG
 from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
 from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
 
-# No display is needed: Qt draws off screen.
+# Qt draws off screen; no display needed.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 WAIT_SEC = 2
@@ -26,8 +26,6 @@ app_log = logging.getLogger("app")
 
 
 class SentNotifications(list):
-    """DesktopNotifier stand-in: records each notification sent."""
-
     def send(self, title, message, urgency, display_sec):
         self.append((title, message, urgency, display_sec))
 
@@ -37,8 +35,6 @@ def noop():
 
 
 class FakeWindow(TrayTarget):
-    """Records each open/close and whether it ran on the GUI thread."""
-
     def __init__(self, *, is_open=False):
         self.opened = is_open
         self.calls = []
@@ -64,8 +60,7 @@ class FakeWindow(TrayTarget):
 
 @pytest.fixture
 def make_tray(tmp_path):
-    """Builds a tray on its own QApplication; both end with the test, as Qt allows one at a
-    time."""
+    """Qt allows one QApplication at a time; tray gets own, ended with test."""
     icon = tmp_path / "icon.png"
     image = QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
@@ -286,8 +281,6 @@ def test_records_are_not_sent_once_the_tray_is_left(tmp_path):
 
 
 class ArrivingNotifications(SentNotifications):
-    """Also signals each arrival, for notifications sent from the tray's worker."""
-
     def __init__(self):
         super().__init__()
         self.arrived = threading.Event()
@@ -311,8 +304,6 @@ def test_a_failed_action_is_sent_as_one_notification(make_tray, error):
 
 
 class FailingNotifications:
-    """DesktopNotifier stand-in with a bug: every send raises."""
-
     def send(self, *_):
         bug = "backend bug"
         raise TypeError(bug)
@@ -324,8 +315,7 @@ def test_a_failing_notifier_does_not_break_the_apps_logging(make_tray):
 
 
 class LoggingLibrary:
-    """desktop-notifier stand-in that logs an ERROR on its own thread while it sends, as a
-    library's internals may."""
+    """Logs ERROR on own thread while sending, as library internals may."""
 
     def __call__(self, **_):
         return self

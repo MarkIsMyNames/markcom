@@ -17,7 +17,7 @@ HTTP_PORT = 80
 UNASSIGNED_PORT = 0
 OWN = f"http://{LOOPBACK}:{PORT}"
 LOCALHOST = f"http://localhost:{PORT}"
-# Its websockets ignore base_url, so they take the whole address.
+# NiceGUI websockets ignore base_url; take whole address.
 OWN_HOST = f"{LOOPBACK}:{PORT}"
 WEBSOCKET_PATH = "/ws"
 

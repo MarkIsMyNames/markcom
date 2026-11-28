@@ -6,7 +6,7 @@ import pytest
 
 from release_tools.versions_unchanged import main
 
-# Versions are relative to whatever the clone holds: 0.0.1 is lower, 99.x higher.
+# Versions relative to whatever clone holds: 0.0.1 lower, 99.x higher.
 
 
 def commit_on(clone, change):

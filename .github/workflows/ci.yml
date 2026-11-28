@@ -32,7 +32,7 @@ jobs:
       - name: Tests with coverage gate
         run: uv run pytest -q
 
-  # A job of its own, so the unit tests stay fast.
+  # own job, so unit tests stay fast
   markcom-integration:
     runs-on: ubuntu-latest
     defaults:
@@ -41,16 +41,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      # libegl1: pytest-qt loads Qt even for these tests
       - name: Install dbus-run-session and Qt's system libraries
         run: sudo apt-get update && sudo apt-get install --yes dbus-daemon libegl1
       - name: Install dependencies (including dev and test)
         run: uv sync --locked
-      # A private session bus, so the fake service can own org.freedesktop.Notifications.
+      # private session bus, so fake service can own org.freedesktop.Notifications
       - name: Integration tests
         run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
 
-  # The tests clone this repository, so they need every commit and tag.
+  # tests clone this repo, so need every commit and tag
   release-tools:
     runs-on: ubuntu-latest
     defaults:
@@ -82,7 +81,7 @@ jobs:
     permissions:
       contents: read
 
-  # web-config is built first because markcom-i18n lints itself with it.
+  # web-config built first: markcom-i18n lints itself with it
   web-libraries:
     runs-on: ubuntu-latest
     strategy:
@@ -114,8 +113,7 @@ jobs:
         run: npm run build
       - name: Dependency audit
         run: npm run audit
-      # web-config has no unit tests: linting markcom-i18n and the react-ui template with it
-      # is its test.
+      # web-config has no unit tests: linting markcom-i18n and react-ui template with it is its test
       - name: Tests with coverage gate
         if: matrix.library == 'markcom-i18n'
         run: npm test
@@ -134,7 +132,7 @@ jobs:
       contents: write
       pull-requests: read
 
-  # Publishes any latest tag npm lacks, so a failed publish is retried by the next run.
+  # publishes any latest tag npm lacks, so next run retries a failed publish
   publish-web-libraries:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: release
@@ -143,7 +141,7 @@ jobs:
       contents: read
       id-token: write
     strategy:
-      # One library failing to publish must not stop the other.
+      # one library failing to publish must not stop the other
       fail-fast: false
       matrix:
         library: [markcom-web-config, markcom-i18n]
@@ -153,7 +151,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Every tag, to find the library's latest release.
+          # all tags: find library's latest release
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -187,7 +185,7 @@ jobs:
           fi
           echo "Publishing ${name} ${version}"
           echo "publish=true" >> "$GITHUB_OUTPUT"
-      # markcom-i18n's tsconfig extends markcom-web-config's, which needs its own dependencies.
+      # markcom-i18n's tsconfig extends web-config's, which needs its own dependencies
       - name: Install markcom-web-config's dependencies
         if: steps.release.outputs.publish == 'true' && matrix.library == 'markcom-i18n'
         working-directory: markcom-web-config
@@ -197,8 +195,7 @@ jobs:
         run: npm ci && npm run build
       - name: Publish
         if: steps.release.outputs.publish == 'true'
-        # npm trusted publishing: npm signs in with this run's OIDC token (id-token: write),
-        # so no npm token is stored anywhere.
+        # trusted publishing: npm signs in with run's OIDC token, so no npm token stored
         run: npm publish --access public --provenance
 
   security:

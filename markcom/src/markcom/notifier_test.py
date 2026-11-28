@@ -12,8 +12,7 @@ DISPLAY_SEC = 8
 
 
 class FakeNotifier:
-    """desktop-notifier stand-in: records each send as (title, message, urgency, timeout) after
-    yielding once, so a caller that didn't wait finds nothing yet."""
+    """Yields once before recording, so a caller that did not wait finds nothing."""
 
     def __init__(self, sent, failure=None):
         self.sent = sent

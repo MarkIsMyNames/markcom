@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 from git import Repo
 
-# release-tools/src/release_tools/conftest.py -> the repository root
 ROOT = Path(__file__).resolve().parents[3]
 
 MARKCOM_LIBRARIES = {
@@ -36,12 +35,11 @@ MARKCOM_LIBRARIES = {
 
 
 class Clone:
-    """A throwaway clone of this repository's HEAD. Its origin is a bare repository holding that
-    commit as main and no tags, so tests never depend on the real repository's releases."""
+    """Origin holds HEAD as main, no tags: tests never depend on real releases."""
 
     def __init__(self, tmp_path: Path) -> None:
         self.origin = Repo.init(tmp_path / "origin.git", bare=True, initial_branch="main")
-        # no hooks: this push only copies commits out of the real repository
+        # No hooks: push only copies commits from real repository.
         Repo(ROOT).git(c="core.hooksPath=/dev/null").push(
             self.origin.working_dir, "HEAD:refs/heads/main"
         )
@@ -50,15 +48,14 @@ class Clone:
             config.set_value("user", "name", "test")
             config.set_value("user", "email", "test@example.com")
         self.path = Path(self.repo.working_dir)
-        # the tests' own library list, so they never depend on the repository's release.json
+        # Tests' own library list: never depend on repository's release.json.
         self.write("release.json", json.dumps(MARKCOM_LIBRARIES, indent=2) + "\n")
         self.repo.git.add("release.json")
         self.repo.git.commit("-m", "release config")
         self.repo.git.push("origin", "HEAD:main")
 
     def merge_pr(self, change: Callable[[], None]) -> None:
-        """Commits what `change` does on a branch from HEAD, then merges it into HEAD with a merge
-        commit, as GitHub checks out a pull request: HEAD^1 is main, HEAD the merge."""
+        """Merge commit as GitHub checks out a PR: HEAD^1 is main, HEAD the merge."""
         self.repo.git.switch("-c", "pr")
         change()
         self.repo.git.add("-A")
@@ -78,7 +75,6 @@ class Clone:
         )
 
     def set_npm_version(self, library: str, version: str, *, lock: bool = False) -> None:
-        """Sets package.json's version; with `lock`, package-lock.json's root entries too."""
         self.edit_json(f"{library}/package.json", lambda data: data.update(version=version))
         if lock:
 
@@ -102,14 +98,13 @@ class Clone:
         (self.path / relative).write_text(text, encoding="utf-8")
 
     def push_to_main(self, change: Callable[[], None]) -> None:
-        """Commits what `change` does and pushes it to origin's main, as a merged PR lands."""
         change()
         self.repo.git.add("-A")
         self.repo.git.commit("--allow-empty", "-m", "change")
         self.repo.git.push("origin", "HEAD:main")
 
     def tag_off_main(self, tag: str) -> None:
-        """Tags a commit that main never holds, as markcom's old off-main release commits."""
+        """Mimics markcom's old off-main release commits."""
         self.repo.git.switch("-c", "off-main")
         self.append("README.md", "\noff main\n")
         self.repo.git.commit("-a", "-m", "off main")
@@ -132,7 +127,7 @@ class Clone:
 
 @pytest.fixture(autouse=True)
 def github_output(tmp_path, monkeypatch):
-    """GitHub Actions always sets it; release appends its step outputs there."""
+    """Release appends step outputs here."""
     output = tmp_path / "github-output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     return output
@@ -158,7 +153,6 @@ source = { editable = "." }
 
 @pytest.fixture
 def root_project(tmp_path, monkeypatch):
-    """A one-package uv project at its repository's root, tagged v<version>, as the template's."""
     origin = Repo.init(tmp_path / "origin.git", bare=True, initial_branch="main")
     repo = Repo.init(tmp_path / "work", initial_branch="main")
     with repo.config_writer() as config:

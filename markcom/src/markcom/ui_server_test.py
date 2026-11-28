@@ -10,14 +10,12 @@ from nicegui.testing import general
 from markcom.own_origin import LOOPBACK
 from markcom.ui_server import UiServer
 
-# Seconds the server may take to stop.
 STOP_WAIT_SEC = 5
 ANY_FREE_PORT = 0
 
 
 @pytest.fixture(autouse=True)
 def nicegui_globals():
-    """Each test starts NiceGUI afresh, as a new process would."""
     with general.nicegui_reset_globals():
         yield
 

@@ -17,12 +17,12 @@ from PySide6.QtWidgets import QApplication
 from markcom.own_origin import LOOPBACK
 from markcom.window import WebWindow
 
-# no display: Qt draws off screen. CI blocks Chromium's sandbox; tests load only their own
-# pages. Window processes inherit both.
+# Qt draws off screen; no display. CI blocks Chromium sandbox; tests load only own pages.
+# Window processes inherit both.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 
-# a window process starts Python, Qt and Chromium before it asks for the page
+# Window process starts Python, Qt and Chromium before asking for page.
 WAIT_MS = 30000
 QUIET_MS = 1000
 CHILD_WAIT_SEC = 60
@@ -71,14 +71,14 @@ def site(tmp_path_factory):
 
 @pytest.fixture(autouse=True)
 def config_home(tmp_path, monkeypatch):
-    """Window processes save their size here, not in the real ~/.config."""
+    """Window processes save size here, not real ~/.config."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     return tmp_path / "config"
 
 
 @pytest.fixture(scope="module")
 def qapp():
-    """pytest-qt's app, but ended with this module, as the tray tests build their own."""
+    """Module-scoped: tray tests build own QApplication."""
     app = QApplication(["window-test"])
     yield app
     app.shutdown()
@@ -117,10 +117,9 @@ def make_window(request, page, icon):
 
 
 def window_processes():
-    """This test process's running markcom.window_process children."""
     found = []
     for child in psutil.Process().children():
-        # ended, or a zombie, while being read
+        # Process may end or be a zombie while read.
         with contextlib.suppress(psutil.NoSuchProcess):
             if "markcom.window_process" in " ".join(child.cmdline()):
                 found.append(child)
@@ -214,7 +213,6 @@ def test_the_page_address_is_not_on_the_window_processs_command_line(page, icon,
 
 @pytest.fixture
 def silent_server():
-    """Accepts connections but never answers, so a page never finishes loading."""
     server = socket.create_server((str(LOOPBACK), ANY_FREE_PORT))
     _, port = server.getsockname()
     accepted = []
@@ -245,12 +243,12 @@ def test_closing_before_the_page_loads_ends_the_process_cleanly(
     qtbot.waitUntil(lambda: accepted != [], timeout=WAIT_MS)
     window.close()
     assert window_processes() == []
-    # a killed process saves nothing
+    # Killed process saves nothing.
     assert (config_home / "markcom" / "App.conf").exists()
 
 
 class QuitOnRequest(SimpleHTTPRequestHandler):
-    """Quits the app once the window process asks for the page, so it has started."""
+    """Quits app only once window process asks for page, so it has started."""
 
     @override
     def log_message(self, *args):
@@ -265,7 +263,7 @@ class QuitOnRequest(SimpleHTTPRequestHandler):
 
 
 def run_an_app_that_quits_with_its_window_open(folder, icon):
-    """Child process: exits EX_OK only if its window process ended before the app did."""
+    """Child process; EX_OK only if its window process ended before app did."""
     app = QApplication(["Quitting"])
     app.setQuitOnLastWindowClosed(False)
     server = ThreadingHTTPServer(
@@ -296,7 +294,7 @@ def test_quitting_the_app_ends_an_open_windows_process_first(tmp_path, icon):
 
 
 def build_a_window_with_no_app(icon):
-    """Child process: no QApplication, so none of the other tests' is present."""
+    """Child process: other tests' QApplication absent."""
     with pytest.raises(RuntimeError):
         WebWindow("Early", HttpUrl(f"http://{LOOPBACK}:{CLOSED_PORT}/"), icon)
 
@@ -311,11 +309,11 @@ def test_a_window_built_before_the_app_fails(icon):
 
 
 def run_a_window_without_a_tray(url, icon):
-    """Child process: a QApplication of its own, as Qt allows one per process."""
+    """Child process: Qt allows one QApplication per process."""
     app = QApplication(["Solo"])
     window = WebWindow("Solo", HttpUrl(url), icon)
     window.open()
-    # posted call runs once exec() starts
+    # Posted call runs once exec() starts.
     QTimer.singleShot(0, window.close)
     app.exec()
 

@@ -8,7 +8,7 @@ from semver import Version
 
 from release_tools.release import main
 
-# Expected versions are relative to whatever the clone holds when the test starts.
+# Expected versions relative to whatever clone holds at test start.
 CODE = "markcom/src/markcom/runner.py"
 
 
@@ -41,7 +41,6 @@ def labels(monkeypatch):
 
 @pytest.fixture
 def released(clone, monkeypatch):
-    """A clone after a first release run: every library tagged at its declared version."""
     monkeypatch.setenv("RELEASE_LABELS", "")
     assert main() == os.EX_OK
     for library in ("markcom", "markcom-web-config", "markcom-i18n"):
@@ -51,8 +50,7 @@ def released(clone, monkeypatch):
 
 @pytest.mark.usefixtures("labels")
 def test_first_run_tags_untagged_libraries_at_their_declared_versions(clone):
-    # this repository's state before its first run: markcom tagged on an off-main commit with
-    # the same code, the npm packages never tagged
+    # Repository before first run: markcom tagged off-main, same code; npm packages untagged.
     clone.tag_off_main(f"markcom-v{declared(clone, 'markcom')}")
     tags, pushed = clone.origin_tags(), clone.origin_main()
     npm = ("markcom-web-config", "markcom-i18n")
@@ -97,10 +95,10 @@ def test_code_change_gets_the_next_patch_in_a_release_commit(released):
 @pytest.mark.parametrize(
     ("library", "relative", "change"),
     [
-        # any manifest change counts, dev-only ones included
+        # Any manifest change counts, dev-only too.
         ("markcom-i18n", "package.json", lambda data: data["dependencies"].update(zz="^1.0.0")),
         ("markcom-i18n", "package.json", lambda data: data["overrides"].update(zz="^1.0.0")),
-        # projects extend web-config's prettier.json directly, so it is its code
+        # Projects extend web-config's prettier.json directly: it is its code.
         ("markcom-web-config", "prettier.json", lambda data: data.update(zzRule=True)),
     ],
 )
@@ -197,7 +195,7 @@ def test_merged_pull_request_label_sets_the_bump(released, monkeypatch, labels, 
     "hook",
     [
         "exit 1",
-        # tags only: the release commit must not land without its tag
+        # Tags only: release commit must not land without its tag.
         'while read -r old new ref; do case "$ref" in refs/tags/*) exit 1;; esac; done',
     ],
 )

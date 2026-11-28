@@ -15,8 +15,6 @@ PORT = 8765
 
 
 class Page:
-    """A page over a value something else changes; records each value it draws."""
-
     def __init__(self):
         self.value = 1
         self.drawn = []
@@ -39,9 +37,8 @@ def page():
 
 @pytest.fixture
 async def user(page, monkeypatch):
-    """A person at the page in a browser, simulated by NiceGUI."""
     monkeypatch.setenv("NICEGUI_USER_SIMULATION", "true")
-    # User swaps in its own notify and navigate; put NiceGUI's back after.
+    # User swaps in own notify and navigate; restore NiceGUI's after.
     monkeypatch.setattr(ui, "notify", ui.notify)
     monkeypatch.setattr(ui, "navigate", ui.navigate)
     with general.nicegui_reset_globals():
@@ -101,8 +98,6 @@ def test_an_announcement_after_nicegui_stops_reaches_no_one(monkeypatch):
 
 
 class ClosingLoop:
-    """NiceGUI's loop closed while the app quits."""
-
     def call_soon_threadsafe(self, *_):
         closed = "Event loop is closed"
         raise RuntimeError(closed)
