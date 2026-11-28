@@ -1,4 +1,4 @@
-# The release workflow writes every version, so a branch must leave versions alone.
+# release sets every version, so a branch must leave them alone
 name: Versions unchanged
 
 on:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   versions-unchanged:
-    # Only a branch off main has versions to compare with main's.
+    # only a branch off main has versions to compare
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -14,13 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Every commit, to find where the branch left main.
+          # all commits: find where branch left main
           fetch-depth: 0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # through toJSON: actionlint 1.7.12 lacks job.workflow_*, which give this workflow's own commit
-          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
-          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .release-tools
           persist-credentials: false
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
