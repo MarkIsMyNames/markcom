@@ -15,8 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Install Qt's system libraries (the tray tests draw off screen)
-        run: sudo apt-get update && sudo apt-get install --yes libegl1
+      - name: Install dbus-run-session and Qt's system libraries
+        run: sudo apt-get update && sudo apt-get install --yes dbus-daemon libegl1
       - name: Install dependencies (including dev and test)
         run: uv sync --locked
       - name: Lint
@@ -31,20 +31,6 @@ jobs:
         run: uv run pip-audit --skip-editable
       - name: Tests with coverage gate
         run: uv run pytest -q
-
-  # own job, so unit tests stay fast
-  markcom-integration:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: markcom
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Install dbus-run-session and Qt's system libraries
-        run: sudo apt-get update && sudo apt-get install --yes dbus-daemon libegl1
-      - name: Install dependencies (including dev and test)
-        run: uv sync --locked
       # private session bus, so fake service can own org.freedesktop.Notifications
       - name: Integration tests
         run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
@@ -126,7 +112,7 @@ jobs:
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [markcom, markcom-integration, web-libraries, release-tools]
+    needs: [markcom, web-libraries, release-tools]
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
