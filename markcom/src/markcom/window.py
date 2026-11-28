@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import override
 
 from pydantic import HttpUrl
-from PySide6.QtCore import QCoreApplication, QProcess, QProcessEnvironment
+from PySide6.QtCore import QCoreApplication, QProcess, QProcessEnvironment, QUrl
 from PySide6.QtWidgets import QApplication
 
 from markcom.config import CONFIG
@@ -25,7 +25,6 @@ WINDOW_PROCESS: tuple[str, ...] = ("-P", "-c", "from markcom.window_process impo
 
 class WebWindow(TrayTarget):
     def __init__(self, title: str, url: HttpUrl, icon: Path) -> None:
-        self._url: HttpUrl = url
         self._spec: WindowSpec = WindowSpec(
             title=title,
             url=str(url),
@@ -53,12 +52,8 @@ class WebWindow(TrayTarget):
         # set before start(), which signals a start failure from within
         self._process = self._new_process()
         # scheme, host, port only: URL may carry a token
-        logger.info(
-            "Starting the window for %s://%s:%s",
-            self._url.scheme,
-            self._url.host,
-            self._url.port,
-        )
+        url: QUrl = QUrl(self._spec.url)
+        logger.info("Starting the window for %s://%s:%d", url.scheme(), url.host(), url.port())
         self._process.start()
 
     @override
