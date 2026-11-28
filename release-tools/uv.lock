@@ -528,8 +528,8 @@ wheels = [
 
 [[package]]
 name = "markcom"
-version = "0.4.5"
-source = { git = "https://github.com/MarkIsMyNames/markcom?subdirectory=markcom&tag=markcom-v0.4.5#f2c0cf90772ef84e23be934054e8cb8d2c025902" }
+version = "0.5.1"
+source = { git = "https://github.com/MarkIsMyNames/markcom?subdirectory=markcom&tag=markcom-v0.5.1#c7c23e708c2ee81d44b1127b6ae3988c0bc18bf0" }
 dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1046,7 +1046,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "gitpython", specifier = ">=3.2.1" },
-    { name = "markcom", git = "https://github.com/MarkIsMyNames/markcom?subdirectory=markcom&tag=markcom-v0.4.5" },
+    { name = "markcom", git = "https://github.com/MarkIsMyNames/markcom?subdirectory=markcom&tag=markcom-v0.5.1" },
     { name = "semver", specifier = ">=3.0" },
     { name = "tomlkit", specifier = ">=0.15.2" },
 ]
