@@ -103,6 +103,4 @@ class FreedesktopNotifier(Notifier):
         reply: Message | None = await self._bus.call(notify)
         # best effort: a refused send is logged, never raised
         if reply is not None and reply.message_type is MessageType.ERROR:
-            logger.warning(
-                "the desktop refused a notification: %s %s", reply.error_name, reply.body
-            )
+            logger.error("the desktop refused a notification: %s %s", reply.error_name, reply.body)
