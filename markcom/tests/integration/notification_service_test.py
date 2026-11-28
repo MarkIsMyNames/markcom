@@ -12,7 +12,7 @@ from dbus_fast.annotations import DBusDict, DBusInt32, DBusSignature, DBusStr, D
 from dbus_fast.service import ServiceInterface, dbus_method
 from desktop_notifier import Urgency
 
-from markcom.notifier import DesktopNotifier
+from markcom.notifier import DesktopNotifier, FreedesktopNotifier
 
 SERVICE = "org.freedesktop.Notifications"
 SERVICE_PATH = "/org/freedesktop/Notifications"
@@ -108,10 +108,22 @@ def service():
         yield running
 
 
-def test_notification_arrives_with_its_fields(service):
-    DesktopNotifier("Integration App", Path("app.png")).send(
-        "title", "body", Urgency.Normal, DISPLAY_SEC
-    )
+DESKTOP_ENTRY = "org.example.IntegrationApp"
+
+
+@pytest.fixture(
+    params=[
+        lambda: DesktopNotifier("Integration App", Path("app.png")),
+        lambda: FreedesktopNotifier("Integration App", Path("app.png"), DESKTOP_ENTRY),
+    ],
+    ids=["desktop-notifier", "freedesktop"],
+)
+def make_notifier(request):
+    return request.param
+
+
+def test_notification_arrives_with_its_fields(service, make_notifier):
+    make_notifier().send("title", "body", Urgency.Normal, DISPLAY_SEC)
     app_name, title, message, _, timeout_ms = service.next_call()
     assert (app_name, title, message, timeout_ms) == (
         "Integration App",
@@ -121,14 +133,20 @@ def test_notification_arrives_with_its_fields(service):
     )
 
 
-def test_urgency_arrives(service):
-    DesktopNotifier("Integration App", Path("app.png")).send(
-        "t", "m", Urgency.Critical, DISPLAY_SEC
-    )
+def test_urgency_arrives(service, make_notifier):
+    make_notifier().send("t", "m", Urgency.Critical, DISPLAY_SEC)
     _, _, _, hints, _ = service.next_call()
     assert hints["urgency"] == CRITICAL_URGENCY_BYTE
 
 
-async def test_notification_sent_from_inside_an_event_loop_arrives(service):
-    DesktopNotifier("Integration App", Path("app.png")).send("t", "m", Urgency.Normal, DISPLAY_SEC)
+async def test_notification_sent_from_inside_an_event_loop_arrives(service, make_notifier):
+    make_notifier().send("t", "m", Urgency.Normal, DISPLAY_SEC)
     assert service.next_call()
+
+
+def test_freedesktop_names_the_apps_desktop_entry(service):
+    FreedesktopNotifier("Integration App", Path("app.png"), DESKTOP_ENTRY).send(
+        "t", "m", Urgency.Normal, DISPLAY_SEC
+    )
+    _, _, _, hints, _ = service.next_call()
+    assert hints["desktop-entry"] == DESKTOP_ENTRY

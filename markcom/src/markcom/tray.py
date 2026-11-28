@@ -14,7 +14,7 @@ from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from markcom.config import CONFIG
-from markcom.notifier import NEVER_EXPIRES_SEC, NOTIFIER_THREAD, DesktopNotifier
+from markcom.notifier import NEVER_EXPIRES_SEC, NOTIFIER_THREAD, Notifier
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class _RecordNotifications(logging.Handler):
 
 @dataclass(frozen=True)
 class TrayNotifications:
-    notifier: DesktopNotifier
+    notifier: Notifier
     error_display_sec: int
 
 

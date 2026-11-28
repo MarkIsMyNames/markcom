@@ -1058,6 +1058,7 @@ dependencies = [
 
 [package.optional-dependencies]
 desktop = [
+    { name = "dbus-fast" },
     { name = "desktop-notifier" },
 ]
 nicegui = [
@@ -1070,6 +1071,7 @@ web = [
     { name = "starlette" },
 ]
 window = [
+    { name = "dbus-fast" },
     { name = "desktop-notifier" },
     { name = "pyside6-webengine" },
 ]
@@ -1077,7 +1079,6 @@ window = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
-    { name = "dbus-fast" },
     { name = "httpx" },
     { name = "markcom", extra = ["nicegui", "window"] },
     { name = "mypy" },
@@ -1092,6 +1093,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dbus-fast", marker = "extra == 'desktop'", specifier = ">=5.2" },
     { name = "desktop-notifier", marker = "extra == 'desktop'", specifier = ">=6.2" },
     { name = "markcom", extras = ["desktop"], marker = "extra == 'window'" },
     { name = "markcom", extras = ["web"], marker = "extra == 'nicegui'" },
@@ -1108,7 +1110,6 @@ provides-extras = ["desktop", "window", "web", "nicegui"]
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.9" },
-    { name = "dbus-fast", specifier = ">=5.2.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "markcom", extras = ["window", "nicegui"] },
     { name = "mypy", specifier = ">=2.4" },

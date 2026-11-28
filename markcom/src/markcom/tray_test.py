@@ -209,9 +209,11 @@ def test_error_and_critical_records_are_sent(make_tray, level, urgency, display_
     sent = SentNotifications()
     make_tray(notifier=sent)
     app_log.log(level, "cannot read %s", "feed")
+    QApplication.processEvents()
     assert [(message, u, d) for _, message, u, d in sent] == [
         ("cannot read feed", urgency, display_sec)
     ]
+    assert _has_badge()
 
 
 def fail_with(error):
