@@ -1,38 +1,36 @@
-# Replace every <PLACEHOLDER> with the project's command for that check (see ci-pipeline SKILL.md).
-# After copying: pre-commit install && pre-commit autoupdate && pre-commit run --all-files
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      - id: check-yaml                           # YAML files that fail to parse
-      - id: check-json                           # JSON files that fail to parse
-      - id: check-toml                           # TOML files that fail to parse
-      - id: end-of-file-fixer                    # files not ending in exactly one newline (fixes them)
-      - id: trailing-whitespace                  # spaces or tabs at the end of lines (fixes them)
-      - id: mixed-line-ending                    # CRLF and LF mixed in one file (converts to LF)
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
         args: [--fix=lf]
-      - id: fix-byte-order-marker                # UTF-8 byte order marks at the start of files (removes them)
-      - id: check-merge-conflict                 # leftover <<<<<<< / >>>>>>> conflict markers
-      - id: check-case-conflict                  # names that clash on case-insensitive file systems (macOS, Windows)
-      - id: check-illegal-windows-names          # file names Windows cannot create (CON, PRN, trailing dots)
-      - id: check-symlinks                       # symlinks that point to nothing
-      - id: destroyed-symlinks                   # symlinks accidentally replaced by a plain file
-      - id: check-shebang-scripts-are-executable # scripts with a #! line but no executable bit
+      - id: fix-byte-order-marker
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-illegal-windows-names
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-shebang-scripts-are-executable
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:
-      - id: gitleaks                             # secrets: API keys, tokens, passwords, private keys
+      - id: gitleaks
 
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
-      - id: actionlint                           # GitHub Actions workflows: syntax, expressions, unknown inputs
+      - id: actionlint
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1-1
     hooks:
-      - id: shellcheck                           # shell scripts: quoting bugs, unsafe patterns, portability
+      - id: shellcheck
 
   - repo: local
     hooks:
@@ -45,13 +43,13 @@ repos:
 
       - id: semgrep
         name: Semgrep
-        entry: semgrep scan --config p/default --config p/secrets --config p/owasp-top-ten --error --quiet
+        entry: semgrep scan --config p/default --config p/owasp-top-ten --config p/github-actions --error --quiet
         language: system
         pass_filenames: false
 
       - id: uv-lock-check
         name: uv.lock matches pyproject.toml
-        # CI's uv sync --locked fails on a stale lock; this catches it before the commit.
+        # CI's uv sync --locked fails on a stale lock; catch it before commit
         entry: bash -c 'uv lock --check --quiet --directory markcom && uv lock --check --quiet --directory release-tools'
         language: system
         files: (^|/)(pyproject\.toml|uv\.lock)$
@@ -78,10 +76,9 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # commands.py: only process launcher, takes list args never a shell; bandit cannot skip per file, so own run
       - id: markcom-language-scanner
         name: "markcom: Language security scanner"
-        entry: bash -c 'cd markcom && uv run bandit -q -r src -x '\''*_test.py,src/markcom/commands.py'\'' && uv run bandit -q src/markcom/commands.py -s B404,B603'
+        entry: bash -c 'cd markcom && uv run bandit -q -r src -c pyproject.toml'
         language: system
         pass_filenames: false
         always_run: true
@@ -147,60 +144,67 @@ repos:
         entry: bash -c 'cd markcom-web-config && npm run lint'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
 
       - id: markcom-web-config-format
         name: "markcom-web-config: Format check"
         entry: bash -c 'cd markcom-web-config && npm run format:check'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
 
       - id: markcom-web-config-types
         name: "markcom-web-config: Strict type check"
         entry: bash -c 'cd markcom-web-config && npm run typecheck'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
 
       - id: markcom-web-config-audit
         name: "markcom-web-config: Dependency audit"
         entry: bash -c 'cd markcom-web-config && npm run audit'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-web-config/
+
+      - id: markcom-web-config-unit-tests
+        name: "markcom-web-config: Unit tests with coverage gate"
+        entry: bash -c 'cd markcom-web-config && npm test'
+        language: system
+        pass_filenames: false
+        files: ^markcom-web-config/
 
       - id: markcom-i18n-lint
         name: "markcom-i18n: Lint"
         entry: bash -c 'cd markcom-i18n && npm run lint'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-format
         name: "markcom-i18n: Format check"
         entry: bash -c 'cd markcom-i18n && npm run format:check'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-types
         name: "markcom-i18n: Strict type check"
         entry: bash -c 'cd markcom-i18n && npm run typecheck'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-audit
         name: "markcom-i18n: Dependency audit"
         entry: bash -c 'cd markcom-i18n && npm run audit'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/
 
       - id: markcom-i18n-unit-tests
         name: "markcom-i18n: Unit tests with coverage gate"
         entry: bash -c 'cd markcom-i18n && npm test'
         language: system
         pass_filenames: false
-        files: ^markcom-(web-config|i18n)/
+        files: ^markcom-i18n/

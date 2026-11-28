@@ -68,7 +68,7 @@
     }
   },
   "devDependencies": {
-    "@markcom/web-config": "file:../markcom-web-config",
+    "@markcom/web-config": "^0.1.8",
     "@playwright/test": "^1.65.0",
     "@tsconfig/strictest": "^2.0.8",
     "@types/node": "^26.6.6",

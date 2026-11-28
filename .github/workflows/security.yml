@@ -1,4 +1,3 @@
-# Shared, so every repository scans for secrets and code issues the same way.
 name: Security
 
 on:
@@ -29,4 +28,4 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Semgrep
-        run: semgrep scan --config p/default --config p/secrets --config p/owasp-top-ten --error
+        run: semgrep scan --config p/default --config p/owasp-top-ten --config p/github-actions --error

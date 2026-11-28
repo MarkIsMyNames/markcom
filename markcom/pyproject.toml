@@ -9,23 +9,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Desktop notifications (markcom.notifier); no Qt, so notification-only apps stay small.
+# no Qt, so notification-only apps stay small
 desktop = [
-    "dbus-fast>=5.2.0",
-    "desktop-notifier>=6.2",
-    "python-slugify>=9.2.0",
-    "xdg-base-dirs>=6.1.0",
+    "dbus-fast>=5.2",
 ]
-# Tray and web window (markcom.tray, markcom.window): every tray app has a window.
+# every tray app has a window
 window = [
     "markcom[desktop]",
     "pyside6-webengine>=6.12",
 ]
-# Loopback Host/Origin guard for any ASGI app (markcom.own_origin); no NiceGUI.
+# no NiceGUI, so any ASGI app can use the guard
 web = [
     "starlette>=1.3",
 ]
-# A NiceGUI UI on its own thread, behind the guard (markcom.ui_server, markcom.page_refresh).
 nicegui = [
     "markcom[web]",
     "nicegui>=4.0",
@@ -40,9 +36,11 @@ dev = [
     "httpx>=0.28",
     "mypy>=2.4",
     "pip-audit>=2.10",
+    "psutil>=7.2",
     "pytest>=9.0",
     "pytest-asyncio>=1.5",
     "pytest-cov>=7.0",
+    "pytest-qt>=4.5",
     "ruff>=0.17",
 ]
 
@@ -54,23 +52,18 @@ build-backend = "hatchling.build"
 packages = ["src/markcom"]
 exclude = ["**/*_test.py"]
 
-# ---------- Tests: next to the code, named *_test.py ----------
 [tool.pytest.ini_options]
 testpaths = ["src"]
 python_files = ["*_test.py"]
 addopts = "--strict-markers --strict-config --cov=markcom --cov-report=term-missing --cov-fail-under=85"
 asyncio_mode = "auto"
+qt_api = "pyside6"
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = [
-    "error",
-    # desktop-notifier 6.2.0 (the latest) calls an asyncio API Python 3.14 deprecates; not our code.
-    "ignore:'asyncio.DefaultEventLoopPolicy' is deprecated:DeprecationWarning:desktop_notifier.main",
-]
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 omit = ["*_test.py"]
 
-# ---------- Lint: every rule on ----------
 [tool.ruff]
 line-length = 100
 src = ["src"]
@@ -99,7 +92,6 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 
-# ---------- Types: strictest, tests excluded ----------
 [tool.mypy]
 strict = true
 python_version = "3.13"
@@ -115,7 +107,6 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 
-# ---------- Security scanner ----------
 [tool.bandit]
-# Test files only: assert and fake credentials are how tests work (code-testing allows this group exclusion).
+# tests only: assert and fake credentials are how tests work
 exclude_dirs = ["*_test.py"]

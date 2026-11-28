@@ -1,4 +1,3 @@
-# Shared, so every repository releases the same way, with release-tools from this workflow's commit.
 name: Release
 
 on:
@@ -11,21 +10,21 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Runs take turns, so each starts from the last one's tags.
-    concurrency:
-      group: release
-      cancel-in-progress: false
+    # runs take turns: each starts from last one's tags
+    concurrency: release
     permissions:
       contents: write
       pull-requests: read
     outputs:
       tags: ${{ steps.release.outputs.tags }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Every commit and tag, to compare against each library's latest release.
+          # all commits and tags: compare against each library's latest release
           fetch-depth: 0
-      # Left untracked, so the release commit never includes release-tools.
+      # untracked, so release commit never includes release-tools
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ job.workflow_repository }}
@@ -35,19 +34,15 @@ jobs:
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Release
         id: release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          # The labels of the pull request merged as this commit; none for a direct push.
-          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" |
-            jq -r --arg sha "$GITHUB_SHA" '.[] | select(.merge_commit_sha == $sha) | .labels[].name')
+          # labels of PR merged as this commit; none on direct push
+          RELEASE_LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+            --jq '.[] | select(.merge_commit_sha == env.GITHUB_SHA) | .labels[].name')
           export RELEASE_LABELS
           uv run --locked --project .release-tools/release-tools release
       - name: Create a GitHub release for each tag
         if: steps.release.outputs.tags != ''
         env:
-          GH_TOKEN: ${{ github.token }}
           TAGS: ${{ steps.release.outputs.tags }}
         run: |
           for tag in $TAGS; do

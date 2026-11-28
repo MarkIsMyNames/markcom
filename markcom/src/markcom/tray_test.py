@@ -1,32 +1,30 @@
 import logging
 import os
-import platform
 import threading
 from contextlib import ExitStack
 from pathlib import Path
 from typing import override
 
 import pytest
-from desktop_notifier import Urgency
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
-from markcom import notifier as notifier_module
+from markcom import notifier
 from markcom.config import CONFIG
-from markcom.notifier import NEVER_EXPIRES_SEC, DesktopNotifier
+from markcom.notifier import NEVER_EXPIRES_SEC, FreedesktopNotifier, Urgency
 from markcom.tray import Tray, TrayAction, TrayNotifications, TrayTarget
 
-# No display is needed: Qt draws off screen.
+# Qt draws off screen; no display needed.
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 WAIT_SEC = 2
+DISPLAY_SEC = 8
+ICON_PX = 64
 app_log = logging.getLogger("app")
 
 
 class SentNotifications(list):
-    """DesktopNotifier stand-in: records each notification sent."""
-
     def send(self, title, message, urgency, display_sec):
         self.append((title, message, urgency, display_sec))
 
@@ -36,8 +34,6 @@ def noop():
 
 
 class FakeWindow(TrayTarget):
-    """Records each open/close and whether it ran on the GUI thread."""
-
     def __init__(self, *, is_open=False):
         self.opened = is_open
         self.calls = []
@@ -63,10 +59,9 @@ class FakeWindow(TrayTarget):
 
 @pytest.fixture
 def make_tray(tmp_path):
-    """Builds a tray on its own QApplication; both end with the test, as Qt allows one at a
-    time."""
+    """Qt allows one QApplication at a time; tray gets own, ended with test."""
     icon = tmp_path / "icon.png"
-    image = QImage(64, 64, QImage.Format.Format_ARGB32)
+    image = QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32)
     image.fill(QColor("#1565c0"))
     image.save(str(icon))
     with ExitStack() as stack:
@@ -74,7 +69,8 @@ def make_tray(tmp_path):
         stack.callback(app.shutdown)
 
         def make(notifier=None, target=None, actions=()):
-            notifications = None if notifier is None else TrayNotifications(notifier, 8)
+            notifier = SentNotifications() if notifier is None else notifier
+            notifications = TrayNotifications(notifier, DISPLAY_SEC)
             return stack.enter_context(
                 Tray(app, icon, notifications, target or FakeWindow(), actions)
             )
@@ -148,7 +144,9 @@ def test_menu_click_returns_before_a_slow_action_and_its_failure_is_contained(ma
 
 
 def _has_badge():
-    image = icon().icon().pixmap(64, 64).toImage().convertToFormat(QImage.Format.Format_RGB32)
+    image = (
+        icon().icon().pixmap(ICON_PX, ICON_PX).toImage().convertToFormat(QImage.Format.Format_RGB32)
+    )
     return any(
         image.pixelColor(x, y) == QColor(CONFIG.tray.badge_colour)
         for x in range(image.width())
@@ -160,19 +158,16 @@ def test_notifications_sent_through_the_tray_show_a_badge_until_a_left_click(mak
     sent = SentNotifications()
     tray = make_tray(notifier=sent)
     assert not _has_badge()
-    tray.send("feed", "down", Urgency.Critical, 8)
-    tray.send("login", "down", Urgency.Critical, 8)
+    tray.send("feed", "down", Urgency.Critical, DISPLAY_SEC)
+    tray.send("login", "down", Urgency.Critical, DISPLAY_SEC)
     QApplication.processEvents()
-    assert sent == [("feed", "down", Urgency.Critical, 8), ("login", "down", Urgency.Critical, 8)]
+    assert sent == [
+        ("feed", "down", Urgency.Critical, DISPLAY_SEC),
+        ("login", "down", Urgency.Critical, DISPLAY_SEC),
+    ]
     assert _has_badge()
     left_click()
     assert not _has_badge()
-
-
-def test_a_tray_without_a_notifier_refuses_to_send(make_tray):
-    tray = make_tray()
-    with pytest.raises(RuntimeError):
-        tray.send("t", "m", Urgency.Critical, 0)
 
 
 def test_quit_ends_exec(make_tray):
@@ -183,11 +178,12 @@ def test_quit_ends_exec(make_tray):
 
 def test_the_icon_shows_until_the_tray_is_left(tmp_path):
     icon_path = tmp_path / "icon.png"
-    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32).save(str(icon_path))
     with ExitStack() as stack:
         app = QApplication(["App"])
         stack.callback(app.shutdown)
-        with Tray(app, icon_path, None, FakeWindow(), ()):
+        notifications = TrayNotifications(SentNotifications(), DISPLAY_SEC)
+        with Tray(app, icon_path, notifications, FakeWindow(), ()):
             assert icon().isVisible()
         assert not icon().isVisible()
 
@@ -200,7 +196,7 @@ def test_the_tray_does_not_quit_when_its_last_window_closes(make_tray):
 @pytest.mark.parametrize(
     ("level", "urgency", "display_sec"),
     [
-        (logging.ERROR, Urgency.Normal, 8),
+        (logging.ERROR, Urgency.Normal, DISPLAY_SEC),
         (logging.CRITICAL, Urgency.Critical, NEVER_EXPIRES_SEC),
     ],
 )
@@ -208,9 +204,11 @@ def test_error_and_critical_records_are_sent(make_tray, level, urgency, display_
     sent = SentNotifications()
     make_tray(notifier=sent)
     app_log.log(level, "cannot read %s", "feed")
+    QApplication.processEvents()
     assert [(message, u, d) for _, message, u, d in sent] == [
         ("cannot read feed", urgency, display_sec)
     ]
+    assert _has_badge()
 
 
 def fail_with(error):
@@ -261,27 +259,20 @@ def test_a_repeated_error_is_sent_each_time(make_tray):
     assert len(sent) == 2
 
 
-def test_a_tray_without_a_notifier_does_not_fail_on_error_records(make_tray):
-    make_tray()
-    app_log.error("down")
-
-
 def test_records_are_not_sent_once_the_tray_is_left(tmp_path):
     icon_path = tmp_path / "icon.png"
-    QImage(64, 64, QImage.Format.Format_ARGB32).save(str(icon_path))
+    QImage(ICON_PX, ICON_PX, QImage.Format.Format_ARGB32).save(str(icon_path))
     sent = SentNotifications()
     with ExitStack() as stack:
         app = QApplication(["App"])
         stack.callback(app.shutdown)
-        with Tray(app, icon_path, TrayNotifications(sent, 8), FakeWindow(), ()):
+        with Tray(app, icon_path, TrayNotifications(sent, DISPLAY_SEC), FakeWindow(), ()):
             pass
         app_log.error("after")
     assert sent == []
 
 
 class ArrivingNotifications(SentNotifications):
-    """Also signals each arrival, for notifications sent from the tray's worker."""
-
     def __init__(self):
         super().__init__()
         self.arrived = threading.Event()
@@ -305,8 +296,6 @@ def test_a_failed_action_is_sent_as_one_notification(make_tray, error):
 
 
 class FailingNotifications:
-    """DesktopNotifier stand-in with a bug: every send raises."""
-
     def send(self, *_):
         bug = "backend bug"
         raise TypeError(bug)
@@ -317,22 +306,20 @@ def test_a_failing_notifier_does_not_break_the_apps_logging(make_tray):
     app_log.error("down")
 
 
-class GoneBus:
-    """DesktopNotifierSync stand-in whose notification service is gone: counts each attempt."""
+class LoggingBus:
+    """Logs ERROR on own thread while sending, as library internals may."""
 
-    def __init__(self):
-        self.attempts = 0
+    async def connect(self):
+        return self
 
-    def send(self, **_):
-        self.attempts += 1
-        gone = "bus gone"
-        raise OSError(gone)
+    async def call(self, _message):
+        logging.getLogger("library").error("internal")
 
 
-def test_a_failed_notification_is_not_itself_sent_as_a_notification(make_tray, monkeypatch):
-    monkeypatch.setattr(platform, "system", lambda: "Darwin")
-    bus = GoneBus()
-    monkeypatch.setattr(notifier_module, "DesktopNotifierSync", lambda **_: bus)
-    make_tray(notifier=DesktopNotifier("App", Path("app.png")))
-    app_log.error("down")
-    assert bus.attempts == 1
+def test_an_error_logged_while_a_notification_is_sent_does_not_hang_the_app(make_tray, monkeypatch):
+    monkeypatch.setattr(notifier, "MessageBus", LoggingBus)
+    make_tray(notifier=FreedesktopNotifier("App", Path("app.png"), "org.example.App"))
+    logging_call = threading.Thread(target=app_log.error, args=("down",), daemon=True)
+    logging_call.start()
+    logging_call.join(WAIT_SEC)
+    assert not logging_call.is_alive()

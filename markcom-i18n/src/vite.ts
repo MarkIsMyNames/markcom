@@ -1,38 +1,26 @@
 import { checkInvalidTranslations, checkMissingTranslations } from '@lingual/i18n-check';
 import { escape as escapeHtml } from 'es-toolkit';
 import type { IndexHtmlTransformContext, Plugin } from 'vite';
-import {
-  flattenLocale,
-  leafKeys,
-  lookupString,
-  type LocaleRecord,
-  type LocaleSet,
-} from './locales.js';
+import { flattenLocale, lookupString, type LocaleRecord, type LocaleSet } from './locales.js';
 
-/** index.html placeholders filled by localeHtmlPlugin. */
 const HTML_PLACEHOLDER: RegExp = /\{\{[\w:.]+\}\}/g;
 const TEXT_BETWEEN_TAGS: RegExp = /(?<=>)[^<>]+(?=<)/g;
 const TEXT_ATTRIBUTE: RegExp =
   /(?<= (?:content|title|alt|aria-label|aria-description|placeholder)=")[^"]*(?=")/g;
 const HEX_COLOUR: RegExp = /#[0-9a-f]{3,8}\b/gi;
-/** The site's page. Storybook and Vitest serve their own HTML through the same Vite config. */
+// Storybook and Vitest serve their own HTML through the same Vite config.
 const SITE_HTML_PATH: string = '/index.html';
 const CHECK_OPTIONS: { format: 'i18next' } = { format: 'i18next' };
-/** Meta content that is configuration, not text a person reads. */
 const ALLOWED_META_CONTENT: ReadonlySet<string> = new Set(['width=device-width, initial-scale=1']);
 
-/** i18n-check compares flat files: one dotted key per string. */
 function flat(locale: LocaleRecord): Record<string, string> {
   return Object.fromEntries(flattenLocale(locale));
 }
 
-function withoutPlaceholders(text: string): string {
-  return text.replace(HTML_PLACEHOLDER, '').trim();
-}
-
-/** Keys whose string is blank. */
 function findBlankStrings(locale: LocaleRecord): string[] {
-  return leafKeys(locale).filter((key: string): boolean => lookupString(locale, key).trim() === '');
+  return [...flattenLocale(locale)]
+    .filter(([, value]: [string, string]): boolean => value.trim() === '')
+    .map(([key]: [string, string]): string => key);
 }
 
 function keysMissingFrom(target: LocaleRecord, source: LocaleRecord): string[] {
@@ -41,17 +29,6 @@ function keysMissingFrom(target: LocaleRecord, source: LocaleRecord): string[] {
   ).flat();
 }
 
-/** Keys the default locale has and this locale lacks. */
-function findMissingKeys(defaultLocale: LocaleRecord, locale: LocaleRecord): string[] {
-  return keysMissingFrom(locale, defaultLocale);
-}
-
-/** Keys this locale has and the default locale lacks. */
-function findExtraKeys(defaultLocale: LocaleRecord, locale: LocaleRecord): string[] {
-  return keysMissingFrom(defaultLocale, locale);
-}
-
-/** Keys whose interpolation placeholders or nesting differ from the default locale. */
 function findInvalidTranslations(defaultLocale: LocaleRecord, locale: LocaleRecord): string[] {
   return Object.values(
     checkInvalidTranslations(flat(defaultLocale), { locale: flat(locale) }, CHECK_OPTIONS),
@@ -60,7 +37,6 @@ function findInvalidTranslations(defaultLocale: LocaleRecord, locale: LocaleReco
     .map(({ key }: { key: string }): string => key);
 }
 
-/** Text in index.html a person would read that does not come from a locale placeholder. */
 function findLiteralHtmlText(html: string): string[] {
   const betweenTags: string[] = [...html.matchAll(TEXT_BETWEEN_TAGS)].map(
     ([text]: RegExpExecArray): string => text,
@@ -69,16 +45,14 @@ function findLiteralHtmlText(html: string): string[] {
     .map(([value]: RegExpExecArray): string => value)
     .filter((value: string): boolean => !ALLOWED_META_CONTENT.has(value));
   return [...betweenTags, ...inAttributes]
-    .map(withoutPlaceholders)
+    .map((text: string): string => text.replace(HTML_PLACEHOLDER, '').trim())
     .filter((text: string): boolean => text !== '');
 }
 
-/** Colours written into index.html instead of coming from the tokens. */
 function findHtmlColours(html: string): string[] {
   return [...html.matchAll(HEX_COLOUR)].map(([colour]: RegExpExecArray): string => colour);
 }
 
-/** Every problem in a site's locale files, one message each; empty when they are all fine. */
 function findLocaleProblems<Lang extends string, Locale extends LocaleRecord>(
   locales: LocaleSet<Lang, Locale>,
 ): string[] {
@@ -92,10 +66,10 @@ function findLocaleProblems<Lang extends string, Locale extends LocaleRecord>(
       const locale: Locale = locales.localeFor(lang);
       const file: string = `${lang}.json`;
       return [
-        ...findMissingKeys(locales.defaultLocale, locale).map(
+        ...keysMissingFrom(locale, locales.defaultLocale).map(
           (key: string): string => `${file}: ${key} is missing`,
         ),
-        ...findExtraKeys(locales.defaultLocale, locale).map(
+        ...keysMissingFrom(locales.defaultLocale, locale).map(
           (key: string): string => `${file}: ${key} is not in ${defaultFile}`,
         ),
         ...findInvalidTranslations(locales.defaultLocale, locale).map(
@@ -106,7 +80,6 @@ function findLocaleProblems<Lang extends string, Locale extends LocaleRecord>(
   return [...blank, ...translations];
 }
 
-/** Every problem in a site's index.html, one message each; empty when it is fine. */
 function findIndexHtmlProblems(html: string): string[] {
   return [
     ...findLiteralHtmlText(html).map(
@@ -118,13 +91,12 @@ function findIndexHtmlProblems(html: string): string[] {
   ];
 }
 
-/** `{{t:meta.title}}` inserts a locale string; `{{lang}}` inserts a named value. */
 const PLACEHOLDER: RegExp = /\{\{(t:)?([\w.]+)\}\}/g;
 const PLUGIN_NAME: string = 'markcom-locale-html';
 
 export type LocaleHtmlOptions<Lang extends string, Locale extends LocaleRecord> = {
   locales: LocaleSet<Lang, Locale>;
-  /** Values for `{{name}}` placeholders, such as the theme colour. `{{lang}}` is filled in. */
+  /** Values for `{{name}}` placeholders, such as the theme colour. */
   values: ReadonlyMap<string, string>;
 };
 

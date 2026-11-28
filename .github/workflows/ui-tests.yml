@@ -1,4 +1,3 @@
-# Shared, so every react-ui website runs the same accessibility and visual checks.
 name: UI tests
 
 on:

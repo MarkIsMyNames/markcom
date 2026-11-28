@@ -9,7 +9,6 @@ type StorybookSettings = {
   features: { backgrounds: boolean };
 };
 
-/** The react-ui websites' Storybook config: every story, with the accessibility and Vitest addons. */
 export function createStorybookConfig(): StorybookSettings {
   return {
     stories: [STORIES],

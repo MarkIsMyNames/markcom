@@ -4,5 +4,5 @@ from markcom.config import CONFIG, LogLevel
 
 
 def configure_logging(level: LogLevel) -> None:
-    """The one place logging is configured; runs after config loads, as config sets the level."""
+    # force: replaces any handler a library set up on import
     logging.basicConfig(level=level, format=CONFIG.log_format, force=True)

@@ -7,62 +7,26 @@ on:
     branches: [main]
 
 jobs:
-  markcom:
+  python-libraries:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - library: markcom
+            has_e2e: true
+          - library: release-tools
+            has_e2e: false
     defaults:
       run:
-        working-directory: markcom
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Install Qt's system libraries (the tray tests draw off screen)
-        run: sudo apt-get update && sudo apt-get install --yes libegl1
-      - name: Install dependencies (including dev and test)
-        run: uv sync --locked
-      - name: Lint
-        run: uv run ruff check .
-      - name: Format check
-        run: uv run ruff format --check .
-      - name: Strict type check
-        run: uv run mypy src
-      - name: Language security scanner
-        run: |
-          uv run bandit -q -r src -x '*_test.py,src/markcom/commands.py'
-          # Bandit cannot skip a test per file: commands.py gets its own run. It takes list args, never a shell.
-          uv run bandit -q src/markcom/commands.py -s B404,B603
-      - name: Dependency audit
-        run: uv run pip-audit --skip-editable
-      - name: Tests with coverage gate
-        run: uv run pytest -q
-
-  # A job of its own, so the unit tests stay fast.
-  markcom-integration:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: markcom
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-      - name: Install dbus-run-session
-        run: sudo apt-get update && sudo apt-get install --yes dbus-daemon
-      - name: Install dependencies (including dev and test)
-        run: uv sync --locked
-      # A private session bus, so the fake service can own org.freedesktop.Notifications.
-      - name: Integration tests
-        run: dbus-run-session -- uv run pytest tests/integration --no-cov -q
-
-  # The tests clone this repository, so they need every commit and tag.
-  release-tools:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: release-tools
+        working-directory: ${{ matrix.library }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # release-tools' tests clone this repo, so need every commit and tag
           fetch-depth: 0
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+      - name: Install dbus-run-session and Qt's system libraries
+        run: sudo apt-get update && sudo apt-get install --yes dbus-daemon libegl1
       - name: Install dependencies (including dev and test)
         run: uv sync --locked
       - name: Lint
@@ -77,14 +41,16 @@ jobs:
         run: uv run pip-audit --skip-editable
       - name: Tests with coverage gate
         run: uv run pytest -q
+      # private session bus, so fake service can own org.freedesktop.Notifications
+      - name: End-to-end tests
+        if: matrix.has_e2e
+        run: dbus-run-session -- uv run pytest e2e --no-cov -q
 
   versions-unchanged:
-    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/versions-unchanged.yml
     permissions:
       contents: read
 
-  # web-config is built first because markcom-i18n lints itself with it.
   web-libraries:
     runs-on: ubuntu-latest
     strategy:
@@ -100,10 +66,6 @@ jobs:
           node-version: 26
           cache: npm
           cache-dependency-path: "*/package-lock.json"
-      - name: Build markcom-web-config, which markcom-i18n lints with
-        if: matrix.library == 'markcom-i18n'
-        working-directory: markcom-web-config
-        run: npm ci && npm run build
       - name: Install dependencies (including dev and test)
         run: npm ci
       - name: Lint
@@ -116,36 +78,31 @@ jobs:
         run: npm run build
       - name: Dependency audit
         run: npm run audit
-      # web-config has no unit tests: linting markcom-i18n and the react-ui template with it
-      # is its test.
       - name: Tests with coverage gate
-        if: matrix.library == 'markcom-i18n'
         run: npm test
       - name: Install Chromium for the end-to-end tests
         if: matrix.library == 'markcom-i18n'
         run: npx playwright install --with-deps chromium
-      - name: End-to-end tests (language routing on the test site in e2e/site)
-        if: matrix.library == 'markcom-i18n'
-        run: npm run test:e2e
+      - name: End-to-end tests
+        run: npm run test:e2e --if-present
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [markcom, markcom-integration, web-libraries, release-tools]
+    if: github.event_name == 'push'
+    needs: [python-libraries, web-libraries]
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
       pull-requests: read
 
-  # Publishes any latest tag npm lacks, so a failed publish is retried by the next run.
+  # publishes any latest tag npm lacks, so next run retries a failed publish
   publish-web-libraries:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     strategy:
-      # One library failing to publish must not stop the other.
+      # one library failing to publish must not stop the other
       fail-fast: false
       matrix:
         library: [markcom-web-config, markcom-i18n]
@@ -155,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Every tag, to find the library's latest release.
+          # all tags: find library's latest release
           fetch-depth: 0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -189,18 +146,12 @@ jobs:
           fi
           echo "Publishing ${name} ${version}"
           echo "publish=true" >> "$GITHUB_OUTPUT"
-      # markcom-i18n's tsconfig extends markcom-web-config's, which needs its own dependencies.
-      - name: Install markcom-web-config's dependencies
-        if: steps.release.outputs.publish == 'true' && matrix.library == 'markcom-i18n'
-        working-directory: markcom-web-config
-        run: npm ci
       - name: Build
         if: steps.release.outputs.publish == 'true'
         run: npm ci && npm run build
       - name: Publish
         if: steps.release.outputs.publish == 'true'
-        # npm trusted publishing: npm signs in with this run's OIDC token (id-token: write),
-        # so no npm token is stored anywhere.
+        # trusted publishing: npm signs in with run's OIDC token, so no npm token stored
         run: npm publish --access public --provenance
 
   security:
