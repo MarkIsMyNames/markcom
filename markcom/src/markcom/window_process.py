@@ -1,5 +1,6 @@
 """Own process, fresh each open: Wayland shows a re-shown window at wrong scale."""
 
+import json
 import logging
 import os
 import sys
@@ -93,7 +94,7 @@ class OwnOriginWindow(QMainWindow):
 
 
 def main() -> None:
-    spec: WindowSpec = WindowSpec.from_json(os.environ.pop(SPEC_VARIABLE))
+    spec: WindowSpec = WindowSpec(**json.loads(os.environ.pop(SPEC_VARIABLE)))
     app: QApplication = QApplication([spec.title])
     window: OwnOriginWindow = OwnOriginWindow(spec, QSettings(ORGANISATION, spec.title))
     # app never writes stdin: readable only at its end, so window closed or app ended

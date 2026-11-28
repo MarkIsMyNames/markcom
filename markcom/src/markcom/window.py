@@ -1,8 +1,10 @@
 """Window in own process, so a closed window holds no QtWebEngine memory."""
 
+import json
 import logging
 import os
 import sys
+from dataclasses import asdict
 from functools import partial
 from pathlib import Path
 from typing import override
@@ -72,7 +74,7 @@ class WebWindow(TrayTarget):
 
     def _new_process(self) -> QProcess:
         environment: QProcessEnvironment = QProcessEnvironment.systemEnvironment()
-        environment.insert(SPEC_VARIABLE, self._spec.to_json())
+        environment.insert(SPEC_VARIABLE, json.dumps(asdict(self._spec)))
         process: QProcess = QProcess()
         process.setProgram(sys.executable)
         process.setArguments(list(WINDOW_PROCESS))
